@@ -263,8 +263,10 @@ def _segment(scene: dict, demo_dir: Path, work: Path, *,
     endcard = ""
     if number == 11:
         # The address sits above the caption with a clear gap, so
-        # the caption box never covers it.
-        endcard = (f",drawtext=fontfile={FONT_REG}:text='{GITHUB_URL}':"
+        # the caption box never covers it. Its colon is escaped for
+        # the drawtext parser, which would cut the text at it.
+        github_text = GITHUB_URL.replace(":", "\\:")
+        endcard = (f",drawtext=fontfile={FONT_REG}:text='{github_text}':"
                    "fontsize=30:fontcolor=white:box=1:boxcolor=black@0.55:"
                    "boxborderw=12:x=(w-tw)/2:y=h-340")
     if is_phone and not vertical:

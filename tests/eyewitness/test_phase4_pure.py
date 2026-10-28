@@ -259,6 +259,7 @@ def test_phone_captions_sit_beside_or_below_and_address_stays_clear():
     assert "y=1620" in text
     assert "y=h-340" in text
     assert "y=h-220" not in text
+    assert 'replace(":",' in text
 
 
 def test_stepper_advances_focuses_and_resumes():
