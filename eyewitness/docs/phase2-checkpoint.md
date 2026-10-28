@@ -10,13 +10,11 @@ run.
   `app/eyewitness/readers/screen.py`): the current Windows 11 crash
   screen is the first case. That screen is black, with white text and
   the stop code in small text at the bottom. A QR code is optional in
-  the prompt and in the verdict. A dark frame goes to Spark for a
-  legibility judgement, because the black screen is dark across the
-  whole photo. Size, blur and glare still stop at the quality gate
-  with no model call. Where Spark finds the screen illegible and the
-  stop code missing, the retake advice is fixed wording: "Move closer
-  so the small line at the bottom of the screen fills more of the
-  photo". Prompt v1 stays untouched on disk.
+  the prompt and in the verdict. The quality gate lets the black
+  screen through on its bright text (see the review below). Where
+  Spark finds the screen illegible and the stop code missing, the
+  customer reads "Move closer so the small line at the bottom of the
+  screen fills more of the photo." Prompt v1 stays untouched on disk.
 - **Sticker reader** (`app/eyewitness/readers/sticker.py`): barcode
   first, then one Spark read. The serial check compares against the
   ticket device serials. A mismatch returns a retake. A Dell label
@@ -68,7 +66,7 @@ Cost: $0.0036 (2,022 input tokens, 252 output tokens). The full
 reading is recorded in `eyewitness/tools/fixtures/golden-screen-v2.json`.
 Total Meta spend for this run: $0.0036 of the $2.00 cap. The golden
 image at first failed the dark-photo quality gate at a mean brightness
-of 1.75. That failure is the reason dark frames now go to Spark.
+of 1.75. The review below gives the rule that replaced that gate.
 
 ## Local verification (observed)
 
@@ -108,6 +106,36 @@ of 1.75. That failure is the reason dark frames now go to Spark.
    skip path and the voice offer with the screen in hand.
 6. Run `venv/bin/python -m pytest tests/` before the push that follows
    this review. The run overrides reserve pushing for review.
+
+## Review (Claude Code, 2026-10-28)
+
+The review found four faults and fixed them before the push.
+
+- **The phone page refused the black crash screen.** Its brightness
+  check stopped any photo with a mean under 25, so the golden screen
+  never left the phone. The server let every dark frame through to
+  Spark. Both now apply one rule: a frame is too dark only when its
+  mean is under 25 and its brightest 0.1 percent is under 50. The
+  crash screen passes on its small bright text and a pocket shot stops
+  with no model call. A test holds the phone and server numbers
+  together.
+- **Spark's retake advice reached the customer page.** Brief 7.8 rules
+  out model text to the customer. The screen and sticker schemas now
+  ask for a `retake_reason` from a fixed list, and the customer reads
+  the fixed sentence for that reason. `screen_read_v2` was amended
+  before it shipped. `sticker_read_v2` sits beside v1.
+- **Every photo went to the screen reader.** A clear photo of the
+  cables could come back as "no screen". Screen photos and the printer
+  panel go to the screen reader now. Other photos get the quality gate
+  and the technician looks at them.
+- **The manual request link came from the Host header.** It now comes
+  from `APP_BASE_URL`, which `tests/test_absolute_url.py` pins for the
+  whole app. That test had failed since Phase 1.
+
+A dash sweep cleared the 15 dashes behind the `test_house_style_dashes`
+failure. After the fixes, `pytest tests/eyewitness` gives 29 passed.
+The full Wegweiser suite gives 20 failures, the same 20 as the branch
+point before any Eyewitness code. They sit in six unrelated files.
 
 ## Gaps carried forward
 
