@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Muse_Image-artwork-F2B33D" alt="Muse Image">
   <img src="https://img.shields.io/badge/Python_/_Flask-backend-3776AB" alt="Python and Flask">
   <img src="https://img.shields.io/badge/status-Phase_4_of_4-2E7D32" alt="Status: Phase 4 of 4">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-see_LICENSE-6B7280" alt="Licence: see LICENSE"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-PolyForm_Strict_1.0.0-6B7280" alt="Licence: PolyForm Strict 1.0.0"></a>
 </p>
 
 ---
@@ -203,4 +203,4 @@ Built by **Andrei Trimbitas** of [Old Forge Technologies](https://oldforge.tech)
 
 Artwork generated with **Muse Image** (`muse-image-1.0` through the Meta Model API). The wordmark and tagline were added with Pillow in Lato, since image models garble lettering. The six generations cost $0.06.
 
-Licence: see [LICENSE](LICENSE).
+Licence: [PolyForm Strict 1.0.0](LICENSE). The code is public to read, and free to run for evaluation, study and other noncommercial purposes. Commercial use, changes and redistribution need a licence from Old Forge Technologies: license@oldforge.tech.
