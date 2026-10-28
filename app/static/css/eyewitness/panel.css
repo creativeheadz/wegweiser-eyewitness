@@ -1,0 +1,8 @@
+.ew-panel .ew-req { margin-top: 0.75rem; }
+.ew-panel .ew-req p { margin: 0.35rem 0; }
+.ew-panel .hd-pick__label { margin-right: 0.5rem; }
+.ew-panel .ew-asked { margin: 0.6rem 0 0.9rem; padding-left: 1.25rem; }
+.ew-panel .ew-asked li { margin: 0.45rem 0; }
+.ew-panel .ew-asked .fk-pill { margin-left: 0.5rem; }
+.ew-panel .ew-asked__reading { display: block; margin-top: 0.2rem; opacity: 0.85; }
+.ew-panel fieldset label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.25rem 1.1rem 0.25rem 0; }

@@ -338,6 +338,20 @@ def panel(ticket_id):
         caps = (Capture.query.filter(Capture.request_id.in_(req_ids),
                                      Capture.kind == "photo")
                 .order_by(Capture.created_at.desc()).all())
+        # The verdict and the state of each item, for the technician:
+        # the intake's assessment per run, and the latest capture per
+        # request item (rows ordered oldest first, so the last wins).
+        from app.eyewitness.models import IntakeRun
+        runs = {}
+        for r in reqs:
+            if r.intake_run_id and r.intake_run_id not in runs:
+                runs[r.intake_run_id] = db.session.get(IntakeRun,
+                                                       r.intake_run_id)
+        latest = {}
+        for c in (Capture.query.filter(Capture.request_id.in_(req_ids))
+                  .order_by(Capture.created_at.asc(), Capture.id.asc())
+                  .all()):
+            latest[(c.request_id, c.item_id)] = c
         from app.utilities.absolute_url import absolute_url
         links = {}
         qr = {}
@@ -355,7 +369,7 @@ def panel(ticket_id):
         except Exception:
             qr = {}
         return render_template("eyewitness/panel.html", rec=rec, reqs=reqs,
-                               caps=caps,
+                               caps=caps, runs=runs, latest=latest,
                                meta_usd=cost, links=links, qr=qr)
     return _view()
 

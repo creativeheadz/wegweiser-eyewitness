@@ -1,6 +1,7 @@
 {#- Technician Eyewitness panel: status, link + QR, captures, cost.
     Technician only. No model names or token counts here beyond the
     Meta spend total the brief asks for (M9). -#}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/eyewitness/panel.css') }}">
 <section class="fk-panel hd-panel ew-panel" data-ew-panel data-ticket="{{ rec.id }}">
   <div class="fk-detail-head"><span class="fk-detail-head__title">Eyewitness evidence</span></div>
   <p class="hd-hint">Meta spend on this ticket: ${{ '%.4f'|format(meta_usd) }}</p>
@@ -9,8 +10,31 @@
   {% endif %}
   {% for r in reqs %}
   <div class="ew-req">
-    <p><strong>{{ r.status }}</strong> · expires {{ r.expires_at|timestamp_to_datetime }}
-      {% if r.delivered_via %}· {{ r.delivered_via }}{% endif %}</p>
+    {% set dv = r.delivered_via or {} %}
+    <p><span class="fk-pill fk-pill--{{ 'ok' if r.status == 'submitted' else ('warn' if r.status == 'needs_approval' else 'note') }}">{{ r.status|replace('_', ' ') }}</span>
+      · expires {{ r.expires_at|timestamp_to_datetime }}
+      {% if dv.get('article_id') %}· posted to {{ (dv.get('connector') or 'the helpdesk')|title }} as article {{ dv.get('article_id') }}{% elif dv.get('error') %}· not delivered: {{ dv.get('error') }}{% endif %}</p>
+    {% set run = runs.get(r.intake_run_id) if r.intake_run_id else None %}
+    {% set verdict = (run.assessment if run else None) or {} %}
+    {% if verdict %}
+    <p><span class="hd-pick__label">Missing from the ticket</span> {{ (verdict.get('missing') or [])|map('replace', '_', ' ')|join(', ') or 'nothing' }}</p>
+    {% if verdict.get('physical_symptom') %}<p><span class="hd-pick__label">Physical symptom</span> {{ verdict.get('physical_symptom')|replace('_', ' ') }}</p>{% endif %}
+    {% endif %}
+    <ol class="ew-asked">
+      {% for item in r.items or [] %}
+      {% set cap = latest.get((r.id, item.id)) %}
+      <li>{{ item.title }}
+        {% if cap %}
+        <span class="fk-pill fk-pill--{{ {'ok': 'ok', 'retake': 'warn', 'failed': 'crit'}.get(cap.status, 'note') }}">{{ {'ok': 'received', 'retake': 'retake asked', 'failed': 'failed', 'skipped': 'skipped', 'processing': 'reading', 'uploaded': 'reading'}.get(cap.status, cap.status) }}</span>
+        {% set rd = cap.reading or {} %}
+        {% if rd.get('summary') %}<span class="ew-asked__reading">{{ rd.get('summary') }}</span>{% elif rd.get('answer') %}<span class="ew-asked__reading">answer: {{ rd.get('answer') }}</span>{% endif %}
+        {% if cap.injection_flag %}<span class="fk-pill fk-pill--warn">text that looks like instructions to an AI, treated as data</span>{% endif %}
+        {% else %}
+        <span class="fk-pill fk-pill--note">waiting</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
     <p><a href="{{ links.get(r.token, '') }}">{{ links.get(r.token, '') }}</a></p>
     {% if qr.get(r.token) %}<p><img src="{{ qr[r.token] }}" alt="QR code for the evidence link" width="160" height="160"></p>{% endif %}
     {% if r.filter_hits %}<p>Outgoing filter: {{ r.filter_hits }}</p>{% endif %}
