@@ -145,6 +145,8 @@ request and each expired link, with retries. The contract sits in
 API as five tools: list templates, request evidence, get evidence,
 release and cancel. It speaks stdio and streamable HTTP, and reads
 `EYEWITNESS_API_URL` and `EYEWITNESS_API_KEY` from its environment.
+The HTTP transport has no sign-in of its own and listens on
+127.0.0.1 by default; keep it there or behind your own access control.
 A Muse Spark demo agent in the same folder calls those tools as
 functions, polls for readings, then writes a summary for a
 technician.

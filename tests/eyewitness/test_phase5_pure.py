@@ -598,3 +598,14 @@ def test_spark_demo_dispatch_and_summary():
                         sleep=lambda s: None)
     assert out["request_id"] == 21
     assert "blue screen" in out["summary"]
+
+
+def test_webhook_keeps_to_the_groups_the_tenant_reads():
+    from app.utilities.helpdesk_inbound import in_read_groups
+    cfg = {"enabled": True, "groups": [{"id": 1, "name": "Users"}]}
+    assert in_read_groups({"group_id": 1}, cfg) is True
+    assert in_read_groups({"group_id": "1"}, cfg) is True
+    assert in_read_groups({"group_id": 2}, cfg) is False
+    assert in_read_groups({}, cfg) is False
+    assert in_read_groups({"group_id": 1},
+                          {"enabled": False, "groups": cfg["groups"]}) is False

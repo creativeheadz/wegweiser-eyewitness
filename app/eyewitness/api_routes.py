@@ -137,6 +137,9 @@ def api_create_request():
     from app.eyewitness.security import outgoing_filter
 
     key_row = _api_key()
+    # A request body is a few fields and a ticket text: 64 KB is plenty.
+    if (request.content_length or 0) > 64 * 1024:
+        return jsonify({"error": "body too large"}), 413
     payload = request.get_json(silent=True) or {}
     external_ref = str(payload.get("external_ref") or "")[:200] or None
 
