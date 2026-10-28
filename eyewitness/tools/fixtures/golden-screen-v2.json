@@ -1,0 +1,23 @@
+{
+  "prompt_version": "screen_read_v2",
+  "image": "windows11-crash-screen-0x1A.png (golden set, held outside the repo)",
+  "verdict": "ok",
+  "reading": {
+    "screen_found": true,
+    "kind": "bsod",
+    "text_lines": [
+      "Your device ran into a problem and needs to restart.",
+      "We're just collecting some error info, and then you can restart.",
+      "87% complete",
+      "Stop code: MEMORY_MANAGEMENT (0x1A)"
+    ],
+    "stop_code": "MEMORY_MANAGEMENT (0x1A)",
+    "error_codes": ["0x1A"],
+    "qr_present": false,
+    "legible": true
+  },
+  "injection_flag": false,
+  "usd": 0.0036,
+  "tokens": {"input": 2022, "output": 252},
+  "checked": "2026-10-28, one live Spark call, no cache"
+}

@@ -1,7 +1,7 @@
 """On-server photo quality: blur, brightness, resolution (7.3).
 
 A failure means `retake` with no model call. Thresholds are pure and
-tested; `assess_image` measures a real photo with Pillow + numpy.
+tested; `assess_image` measures a supplied photo with Pillow + numpy.
 """
 from __future__ import annotations
 
