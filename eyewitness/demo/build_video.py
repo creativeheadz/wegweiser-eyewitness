@@ -421,6 +421,8 @@ def _end_card_clip(duration: float, work: Path, name: str) -> Path:
         ("Muse Spark · SAM 3.1 · Muse Voice Transcribe · "
          "Muse Image · built with Muse Code", small,
          (190, 190, 190), 590),
+        ("Zammad webhook · Evidence API · MCP server", small,
+         (255, 205, 140), 645),
     ]
     fps = 15
     total = max(int(duration * fps), 1)
