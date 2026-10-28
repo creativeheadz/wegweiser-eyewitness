@@ -17,6 +17,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from typing import Annotated  # noqa: E402
+
+from pydantic import Field  # noqa: E402
+
 from eyewitness.mcp.client import EvidenceClient  # noqa: E402
 
 TOOL_SCHEMAS = [
@@ -26,16 +30,18 @@ TOOL_SCHEMAS = [
      "inputSchema": {"type": "object", "properties": {},
                      "additionalProperties": False}},
     {"name": "request_evidence",
-     "description": "Ask a customer for evidence. Give template names, "
-                    "or set auto with the ticket text and let the "
-                    "intake agent choose. The reply carries the "
-                    "customer text, the phone link and its expiry.",
+     "description": "Ask a customer for evidence. Either set auto with "
+                    "the ticket text and let the intake agent choose, "
+                    "or name at most four templates from "
+                    "list_templates and at most two quick questions. "
+                    "The reply carries the customer text, the phone "
+                    "link and its expiry.",
      "inputSchema": {
          "type": "object",
          "properties": {
-             "templates": {"type": "array",
+             "templates": {"type": "array", "maxItems": 4,
                            "items": {"type": "string"}},
-             "questions": {"type": "array",
+             "questions": {"type": "array", "maxItems": 2,
                            "items": {"type": "string"}},
              "auto": {"type": "boolean"},
              "ticket_text": {"type": "string"},
@@ -72,9 +78,11 @@ def list_templates() -> dict:
     return get_client().list_templates()
 
 
-def request_evidence(templates: list | None = None,
-                     questions: list | None = None, auto: bool = False,
-                     ticket_text: str = "", external_ref: str = "") -> dict:
+def request_evidence(
+        templates: Annotated[list[str] | None, Field(max_length=4)] = None,
+        questions: Annotated[list[str] | None, Field(max_length=2)] = None,
+        auto: bool = False, ticket_text: str = "",
+        external_ref: str = "") -> dict:
     return get_client().request_evidence(
         templates=templates, questions=questions, auto=auto,
         ticket_text=ticket_text, external_ref=external_ref)
@@ -96,11 +104,13 @@ def build_server(host: str = "127.0.0.1", port: int = 8000):
     """FastMCP server with the five tools registered."""
     from mcp.server.fastmcp import FastMCP
     server = FastMCP("eyewitness", host=host, port=port)
-    server.tool()(list_templates)
-    server.tool()(request_evidence)
-    server.tool()(get_evidence)
-    server.tool()(release_evidence)
-    server.tool()(cancel_evidence)
+    # Each tool carries the description from TOOL_SCHEMAS, so a client
+    # model reads the limits and the untrusted fence from the server.
+    described = {spec["name"]: spec["description"] for spec in TOOL_SCHEMAS}
+    for fn in (list_templates, request_evidence, get_evidence,
+               release_evidence, cancel_evidence):
+        server.tool(name=fn.__name__,
+                    description=described[fn.__name__])(fn)
     return server
 
 

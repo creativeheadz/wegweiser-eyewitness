@@ -37,14 +37,16 @@ FUNCTIONS = [
      "parameters": {"type": "object", "properties": {},
                     "additionalProperties": False}},
     {"name": "request_evidence",
-     "description": "Ask a customer for evidence from templates, or "
-                    "with auto and the ticket text.",
+     "description": "Ask a customer for evidence. Either set auto "
+                    "with the ticket text and let Eyewitness choose, "
+                    "or name at most four templates from "
+                    "list_templates and at most two quick questions.",
      "parameters": {
          "type": "object",
          "properties": {
-             "templates": {"type": "array",
+             "templates": {"type": "array", "maxItems": 4,
                            "items": {"type": "string"}},
-             "questions": {"type": "array",
+             "questions": {"type": "array", "maxItems": 2,
                            "items": {"type": "string"}},
              "auto": {"type": "boolean"},
              "ticket_text": {"type": "string"},
@@ -162,7 +164,12 @@ def run_demo(ticket_text: str, *, evidence_client=None, chat=None,
                 arguments = json.loads(fn.get("arguments") or "{}")
             except ValueError:
                 arguments = {}
-            result = dispatch_tool(client, name, arguments)
+            # A refused call goes back to the model as its tool result,
+            # so it can correct the call instead of ending the run.
+            try:
+                result = dispatch_tool(client, name, arguments)
+            except Exception as exc:  # noqa: BLE001 - reported to the model
+                result = {"error": str(exc)[:300]}
             steps.append({"tool": name, "result": result})
             if name == "request_evidence" and isinstance(result, dict):
                 request_id = result.get("id") or request_id

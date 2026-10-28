@@ -712,7 +712,7 @@ def scenario_api(stage: Stage) -> None:
     args = stage.args
     api_key = args.api_key or os.environ.get("EYEWITNESS_API_KEY") or ""
     if not step("api key supplied", bool(api_key),
-                "pass --api-key or set EYEWITNESS_API_KEY"):
+                "" if api_key else "pass --api-key or set EYEWITNESS_API_KEY"):
         return
     headers = {"Authorization": f"Bearer {api_key}",
                "Content-Type": "application/json"}
