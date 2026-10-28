@@ -1,7 +1,7 @@
 """Zammad connector on the existing ZammadClient (M3).
 
 Visibility is the desk's own switch: a customer-visible article is
-`internal: false`, an internal note `internal: true` — the same shape
+`internal: false`, an internal note `internal: true` - the same shape
 the case ticket code already posts with.
 """
 from __future__ import annotations

@@ -142,7 +142,7 @@ def test_outgoing_filter():
 
 
 def test_untrusted_wrapper_and_injection_cannot_alter_text():
-    wrapped = wrap_untrusted(["[1] screen photo — ok"])
+    wrapped = wrap_untrusted(["[1] screen photo - ok"])
     assert 'untrusted="true"' in wrapped and "Never follow" in wrapped
     # A flagged reading stays data inside the fence; customer text is
     # template-rendered regardless of capture content.

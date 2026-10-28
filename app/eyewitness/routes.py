@@ -1,7 +1,7 @@
 """Eyewitness routes (M4, M5, S5-manual).
 
-Public: /eyewitness/<token>/* — token-scoped, no login, rate limited.
-Technician: /helpdesk/tickets/<id>/evidence/* — login + ticket access.
+Public: /eyewitness/<token>/* - token-scoped, no login, rate limited.
+Technician: /helpdesk/tickets/<id>/evidence/* - login + ticket access.
 Captures live under EYEWITNESS_STORAGE_DIR, never app/static, and are
 served only through these routes.
 """
