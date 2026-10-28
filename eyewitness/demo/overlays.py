@@ -311,9 +311,46 @@ def _wrap(text: str, width: int) -> list[str]:
     return lines
 
 
+_LANGUAGE_NAMES = {
+    "en": "English", "eng": "English", "english": "English",
+    "de": "German", "deu": "German", "ger": "German",
+    "german": "German", "deutsch": "German",
+    "fr": "French", "fra": "French", "french": "French",
+    "es": "Spanish", "spa": "Spanish", "spanish": "Spanish",
+    "it": "Italian", "ita": "Italian", "italian": "Italian",
+    "nl": "Dutch", "nld": "Dutch", "dutch": "Dutch",
+}
+
+
+def language_display(value) -> str:
+    """The display name for a language from a voice reading."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    key = text.lower().split("-")[0].split("_")[0]
+    if key in _LANGUAGE_NAMES:
+        return _LANGUAGE_NAMES[key]
+    return text[:1].upper() + text[1:]
+
+
+def voice_note_line(language) -> str:
+    """The card line under a voice note, from the reading itself."""
+    display = language_display(language)
+    if not display:
+        return "Kept as a short summary in English."
+    if display == "English":
+        return "Heard in English, kept as a short summary."
+    return f"Heard in {display}, kept as an English summary."
+
+
 def make_scene8(crash: Path, demo_dir: Path,
-                transcript: str = "") -> Path:
-    """Crash screen with the stop-code line boxed, fields beside it."""
+                transcript: str = "", reading: dict | None = None) -> Path:
+    """Crash screen with the stop-code line boxed, fields beside it.
+
+    The voice card takes its transcript and its language from the
+    voice reading where one is given, so the card states the
+    language the note was heard in.
+    """
     from PIL import Image, ImageDraw
     out_dir = demo_dir / "overlays"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -353,14 +390,24 @@ def make_scene8(crash: Path, demo_dir: Path,
     y += 12
     draw.text((panel_x, y), "Voice note", fill=(255, 255, 255), font=_font(34))
     y += 52
-    heard = transcript or "Hello, this is Brenda at the front desk. My computer crashed twice this morning, now it just blinks."
-    for line in _wrap(heard, 34)[:5]:
+    reading = reading or {}
+    heard = (str(reading.get("transcript") or "").strip() or transcript
+             or "Hello, this is Brenda at the front desk. My computer crashed twice this morning, now it just blinks.")
+    for line in _wrap(heard, 34)[:7]:
         draw.text((panel_x, y), line, fill=(225, 225, 225), font=_font(24))
         y += 32
     y += 10
-    draw.text((panel_x, y), "Heard in English, kept as a short summary.",
+    language = language_display(reading.get("language"))
+    draw.text((panel_x, y), voice_note_line(reading.get("language")),
               fill=(170, 170, 170), font=_font(22))
     canvas.save(target, format="PNG")
+    # The language the card states, saved for the video build. The
+    # build warns where a caption names a different language.
+    try:
+        (out_dir / "scene08-voice.json").write_text(
+            json.dumps({"language": language or None}), encoding="utf-8")
+    except OSError:
+        pass
     print(f"overlays: wrote {target.name}")
     return target
 
@@ -419,6 +466,8 @@ def main() -> int:
     parser.add_argument("--crash", default="")
     parser.add_argument("--sticky", default="")
     parser.add_argument("--transcript", default="")
+    parser.add_argument("--voice", default="",
+                        help="voice note file; its reading sets the card")
     parser.add_argument("--excerpt", default="")
     args = parser.parse_args()
     if not args.demo_dir:
@@ -430,8 +479,17 @@ def main() -> int:
     if args.blink:
         make_scene7(Path(args.blink), demo_dir, client)
     if args.crash:
+        reading = None
+        if args.voice:
+            from app.eyewitness.readers.voice import read_voice
+            voice_path = Path(args.voice)
+            result = read_voice(voice_path.read_bytes(), None,
+                                client=client)
+            reading = result.get("reading") or {}
+            calls_note = reading.get("language")
+            print(f"overlays: voice reading language={calls_note}")
         make_scene8(Path(args.crash), demo_dir,
-                    transcript=args.transcript)
+                    transcript=args.transcript, reading=reading)
     if args.sticky:
         make_scene9(Path(args.sticky), demo_dir, excerpt=args.excerpt)
     total = sum(c["usd"] for c in calls)

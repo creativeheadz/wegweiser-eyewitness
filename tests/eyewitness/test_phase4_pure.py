@@ -207,6 +207,53 @@ def test_item_done_states_skipped_and_answered():
     assert first_unfinished_index([], {}) == 0
 
 
+def _load_demo_module(name):
+    import importlib.util
+    path = ROOT / "eyewitness" / "demo" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"demo_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_caption_language_warning_names_the_mismatch():
+    build_video = _load_demo_module("build_video")
+    scenes = [{"number": 8, "caption": "Her voice note, recorded in "
+               "German, arrives as an English summary."},
+              {"number": 5, "caption": "Brenda opens the link."}]
+    warnings = build_video.caption_language_warnings(scenes, {8: "English"})
+    assert len(warnings) == 1
+    assert warnings[0].startswith("WARNING: scene 8")
+    assert "German" in warnings[0] and "English" in warnings[0]
+    assert build_video.caption_language_warnings(scenes, {8: "German"}) == []
+    assert build_video.caption_language_warnings(scenes, {8: "en"}) != []
+    missing = build_video.caption_language_warnings(scenes, {})
+    assert "no voice reading" in missing[0]
+
+
+def test_voice_card_language_comes_from_the_reading():
+    overlays = _load_demo_module("overlays")
+    assert overlays.language_display("en") == "English"
+    assert overlays.language_display("German") == "German"
+    assert overlays.language_display("de") == "German"
+    assert overlays.language_display("") == ""
+    assert overlays.voice_note_line("English") == \
+        "Heard in English, kept as a short summary."
+    assert overlays.voice_note_line("de") == \
+        "Heard in German, kept as an English summary."
+    assert "English" in overlays.voice_note_line(None)
+
+
+def test_phone_captions_sit_beside_or_below_and_address_stays_clear():
+    text = (ROOT / "eyewitness/demo/build_video.py").read_text(
+        encoding="utf-8")
+    assert 'visual_rel.startswith("phone/")' in text
+    assert "x=680:y=460" in text
+    assert "y=1620" in text
+    assert "y=h-340" in text
+    assert "y=h-220" not in text
+
+
 def test_stepper_advances_focuses_and_resumes():
     html = (ROOT / "app/templates/eyewitness/customer.html").read_text(
         encoding="utf-8")

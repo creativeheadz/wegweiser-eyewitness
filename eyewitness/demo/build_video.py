@@ -14,7 +14,10 @@ Captions come from the voice-over files through Voice Transcribe
 when those files sit in the demo folder. At other times the
 caption is the storyboard wording for the scene. A voice file that
 Andrei has not recorded yet is spoken for the draft by ffmpeg
-flite, and its file name marks it as a placeholder.
+flite, and its file name marks it as a placeholder. Phone scenes
+keep the caption beside or below the phone screen. The build
+prints a WARNING when a caption names a language that the voice
+reading for that scene does not have.
 
 Usage:
   EYEWITNESS_DEMO_DIR=/path/to/demo-media venv/bin/python \
@@ -130,6 +133,80 @@ def _caption_text(scene: dict, demo_dir: Path) -> str:
     return str(scene.get("caption") or "")
 
 
+_LANGUAGE_NAMES = {
+    "en": "English", "eng": "English", "english": "English",
+    "de": "German", "deu": "German", "ger": "German",
+    "german": "German", "deutsch": "German",
+    "fr": "French", "fra": "French", "french": "French",
+    "es": "Spanish", "spa": "Spanish", "spanish": "Spanish",
+    "it": "Italian", "ita": "Italian", "italian": "Italian",
+    "nl": "Dutch", "nld": "Dutch", "dutch": "Dutch",
+    "pt": "Portuguese", "por": "Portuguese", "portuguese": "Portuguese",
+    "pl": "Polish", "pol": "Polish", "polish": "Polish",
+}
+
+
+def _language_name(value) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    key = text.lower().split("-")[0].split("_")[0]
+    if key in _LANGUAGE_NAMES:
+        return _LANGUAGE_NAMES[key]
+    # A full name from a reading keeps its spelling, capitalised.
+    return text[:1].upper() + text[1:]
+
+
+def caption_language_warnings(scenes, readings) -> list[str]:
+    """One warning per scene whose caption names a note language
+    that the voice reading for that scene does not have."""
+    import re
+    warnings: list[str] = []
+    for scene in scenes or []:
+        caption = str(scene.get("caption") or "")
+        found = re.search(
+            r"(?:recorded|spoken|heard)\s+in\s+([A-Za-z]+)", caption,
+            flags=re.IGNORECASE)
+        if not found:
+            continue
+        claimed = _language_name(found.group(1))
+        number = int(scene.get("number") or 0)
+        actual_raw = (readings or {}).get(number)
+        if actual_raw is None:
+            actual_raw = (readings or {}).get(str(number))
+        actual = _language_name(actual_raw)
+        if not actual:
+            warnings.append(
+                f"WARNING: scene {number} caption says the voice note "
+                f"was recorded in {claimed}, but no voice reading was "
+                "found for that scene.")
+        elif actual.lower() != claimed.lower():
+            warnings.append(
+                f"WARNING: scene {number} caption says the voice note "
+                f"was recorded in {claimed}, but the voice reading is "
+                f"in {actual}.")
+    return warnings
+
+
+def _voice_readings(demo_dir: Path, scenes) -> dict:
+    """Voice reading languages saved beside the overlay cards."""
+    import json
+    readings: dict = {}
+    for scene in scenes or []:
+        number = int(scene.get("number") or 0)
+        sidecar = demo_dir / "overlays" / f"scene{number:02d}-voice.json"
+        if not sidecar.exists():
+            continue
+        try:
+            data = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        language = data.get("language") if isinstance(data, dict) else None
+        if language:
+            readings[number] = language
+    return readings
+
+
 def _badge_filter(badge, width: int) -> str:
     if not badge:
         return ""
@@ -161,12 +238,21 @@ def _segment(scene: dict, demo_dir: Path, work: Path, *,
         is_placeholder_voice = True
     caption = _caption_text(scene, demo_dir) if not is_placeholder_voice \
         else str(scene.get("caption") or "")
-    # Wrap the caption for the burned line at the foot of the frame.
+    is_phone = visual_rel.startswith("phone/")
+    # Wrap the caption for the burned line. Phone recordings keep
+    # the caption beside or below the phone screen, never on it.
     # The wording goes through a text file, so punctuation stays whole.
+    if is_phone and not vertical:
+        wrap_width = 40
+    elif is_phone:
+        wrap_width = 42
+    else:
+        wrap_width = 58
     tag = "v" if vertical else "h"
     cap_file = work / f"cap-{number:02d}-{tag}.txt"
-    cap_file.write_text("\n".join(textwrap.wrap(caption, 58)[:3]),
-                        encoding="utf-8")
+    cap_file.write_text(
+        "\n".join(textwrap.wrap(caption, wrap_width)[:6 if is_phone else 3]),
+        encoding="utf-8")
     target = work / f"seg-{number:02d}-{tag}.mp4"
     badge = _badge_filter(scene.get("badge"), width)
     title = ""
@@ -176,17 +262,40 @@ def _segment(scene: dict, demo_dir: Path, work: Path, *,
                  "boxborderw=18:x=(w-tw)/2:y=48")
     endcard = ""
     if number == 11:
+        # The address sits above the caption with a clear gap, so
+        # the caption box never covers it.
         endcard = (f",drawtext=fontfile={FONT_REG}:text='{GITHUB_URL}':"
                    "fontsize=30:fontcolor=white:box=1:boxcolor=black@0.55:"
-                   "boxborderw=12:x=(w-tw)/2:y=h-220")
-    caption_draw = (
-        f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
-        "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
-        "x=(w-tw)/2:y=h-150:line_spacing=6")
+                   "boxborderw=12:x=(w-tw)/2:y=h-340")
+    if is_phone and not vertical:
+        caption_draw = (
+            f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
+            "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
+            "x=680:y=460:line_spacing=6")
+    elif is_phone and vertical:
+        caption_draw = (
+            f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
+            "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
+            "x=(w-tw)/2:y=1620:line_spacing=6")
+    else:
+        caption_draw = (
+            f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
+            "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
+            "x=(w-tw)/2:y=h-150:line_spacing=6")
     is_video = visual.suffix.lower() in (".mp4", ".webm", ".mov")
-    if vertical:
+    if vertical and is_phone:
+        # The phone sits at the top and the caption below it.
+        vfilter = (f"scale=720:1500:force_original_aspect_ratio=decrease,"
+                   f"pad=1080:1920:(ow-iw)/2:40,fps=30"
+                   f"{badge}{title}{caption_draw}{endcard}")
+    elif vertical:
         vfilter = (f"scale=1080:1920:force_original_aspect_ratio=increase,"
                    f"crop=1080:1920,fps=30{badge}{title}{caption_draw}{endcard}")
+    elif is_phone:
+        # The phone sits at the left and the caption beside it.
+        vfilter = (f"scale=1920:1080:force_original_aspect_ratio=decrease,"
+                   f"pad=1920:1080:120:(oh-ih)/2,fps=30"
+                   f"{badge}{title}{caption_draw}{endcard}")
     else:
         vfilter = (f"scale=1920:1080:force_original_aspect_ratio=decrease,"
                    f"pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30"
@@ -264,6 +373,9 @@ def build(demo_dir: Path, out: Path, *, vertical_only: bool = False,
         (Path(__file__).with_name("storyboard.yaml")).read_text(
             encoding="utf-8"))
     scenes = board.get("scenes") or []
+    for warning in caption_language_warnings(
+            scenes, _voice_readings(demo_dir, scenes)):
+        print(warning)
     total = sum(float(s["duration"]) for s in scenes)
     if total > MAX_TOTAL_S:
         raise SystemExit(
