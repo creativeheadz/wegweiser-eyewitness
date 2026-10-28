@@ -49,8 +49,7 @@ def record(url: str, scene: int, demo_dir: Path,
     if fake_source is not None:
         y4m = to_y4m(fake_source, out_dir / f"fake-scene{scene:02d}.y4m")
     from playwright.sync_api import sync_playwright
-    chrome_args = ["--no-sandbox",
-                   "--use-fake-ui-for-media-stream",
+    chrome_args = ["--use-fake-ui-for-media-stream",
                    "--use-fake-device-for-media-stream"]
     if y4m is not None:
         chrome_args.append(f"--use-file-for-fake-video-capture={y4m}")

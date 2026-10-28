@@ -244,6 +244,13 @@ def test_voice_card_language_comes_from_the_reading():
     assert "English" in overlays.voice_note_line(None)
 
 
+def test_record_phone_keeps_the_chrome_sandbox():
+    text = (ROOT / "eyewitness/demo/record_phone.py").read_text(
+        encoding="utf-8")
+    assert "--no-sandbox" not in text
+    assert "--use-fake-device-for-media-stream" in text
+
+
 def test_phone_captions_sit_beside_or_below_and_address_stays_clear():
     text = (ROOT / "eyewitness/demo/build_video.py").read_text(
         encoding="utf-8")
