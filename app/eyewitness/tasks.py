@@ -114,6 +114,13 @@ def process_capture(capture_id: int) -> dict:
         cap.error = str(exc)[:500]
     cap.processed_at = int(time.time())
     db.session.commit()
+    if cap.status == "ok":
+        try:
+            from app.eyewitness import callbacks as ew_callbacks
+            ew_callbacks.fire(cap.request_id, "evidence.read",
+                              capture_id=cap.id)
+        except Exception:
+            logger.exception("eyewitness evidence.read callback failed")
     # Release when this capture completes the request, and post a
     # follow-up note when it lands after release on a next-time item.
     try:
@@ -153,3 +160,15 @@ def expire_requests():
 def retention_sweep():
     from app.eyewitness.retention import sweep_purge
     return sweep_purge()
+
+
+@celery.task(name="app.eyewitness.deliver_callback", bind=True,
+             max_retries=4, default_retry_delay=60)
+def deliver_callback(self, delivery_id: int):
+    """One signed callback, retried with growing waits (Phase 5)."""
+    from app.eyewitness.callbacks import deliver
+    try:
+        return deliver(delivery_id)
+    except Exception as exc:
+        countdown = 60 * (2 ** min(self.request.retries, 4))
+        raise self.retry(exc=exc, countdown=countdown)

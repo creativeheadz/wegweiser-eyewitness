@@ -11,8 +11,10 @@ Claude Code runs these on staging after deploying a Phase 3 build:
 
 Scenarios: email (the Phase 2 flow, the default), help (the help
 button path with a next-time item and a follow-up capture), video
-(the Dell blink clip), voice (skip everything, then a voice note)
-and injection (the sticky note photo). Media paths come in as
+(the Dell blink clip), voice (skip everything, then a voice note),
+injection (the sticky note photo), webhook (a ticket created in
+Zammad arrives by push, with no poll in the scenario) and api (the
+Evidence API with a tenant key). Media paths come in as
 arguments. One PASS or FAIL line prints per step. The script prints
 no secrets and no evidence tokens. Zammad tickets are closed at the
 end; the Wegweiser rows stay as the demo record.
@@ -644,9 +646,128 @@ def scenario_help(stage: Stage) -> None:
             stage.close_ticket()
 
 
+def scenario_webhook(stage: Stage) -> None:
+    """The push path: a ticket created in Zammad arrives by webhook.
+
+    No poll runs in this scenario. The row appears only where the
+    Zammad trigger called the hook address from the setup command.
+    """
+    args = stage.args
+    if not stage.create_ticket(
+            "Computer crashes to a black screen and now blinks",
+            "<p>My computer keeps crashing. The screen goes black "
+            "and says it ran into a problem and needs to restart, "
+            "with a small stop code line at the bottom. It did this "
+            "twice this morning. Now it will not start at all and "
+            "the power light keeps blinking.</p>"):
+        return
+    try:
+        from app.models.helpdesk import HelpdeskTicket
+
+        def indexed():
+            stage.db.session.expire_all()
+            return HelpdeskTicket.query.filter_by(
+                tenant_uuid=stage.tenant_uuid, provider="zammad",
+                external_id=stage.ext_id).first()
+
+        rec = wait_for(indexed, args.timeout)
+        if not step("ticket indexed by webhook push", rec is not None,
+                    "set up the Zammad webhook first" if rec is None
+                    else f"record={rec.id}"):
+            return
+        run, req = stage.wait_run_and_request(rec, args.timeout)
+        if not req:
+            return
+        screen_item = next(
+            (i for i in req.items if i.get("template")
+             in ("screen_photo", "screen_photo_next_time")), None)
+        if not step("screen item was asked", screen_item is not None):
+            return
+        cap_id, code = stage.upload(
+            req.token, screen_item["id"], args.golden, "crash.png",
+            "image/png")
+        step("golden photo uploaded", cap_id is not None,
+             f"http={code}")
+        state = stage.wait_capture(req.token, cap_id, args.timeout)
+        step("screen verdict returned",
+             bool(state and state.get("status") == "ok"),
+             f"status={(state or {}).get('status')}")
+        stage.answers_and_skips(req, skip_templates={
+            "power_light_video"})
+        stage.http.post(f"{stage.base}/eyewitness/{req.token}"
+                        "/voice-offer", json={"accept": False},
+                        timeout=30)
+        stage.http.post(f"{stage.base}/eyewitness/{req.token}/done",
+                        timeout=30)
+        step("ticket released to the governor",
+             stage.wait_released(run, args.timeout) is not None)
+        stage.cost_step(run, req)
+    finally:
+        stage.close_ticket()
+
+
+def scenario_api(stage: Stage) -> None:
+    """The Evidence API path, with a tenant key and no desk ticket."""
+    import os
+    args = stage.args
+    api_key = args.api_key or os.environ.get("EYEWITNESS_API_KEY") or ""
+    if not step("api key supplied", bool(api_key),
+                "pass --api-key or set EYEWITNESS_API_KEY"):
+        return
+    headers = {"Authorization": f"Bearer {api_key}",
+               "Content-Type": "application/json"}
+    base = stage.base
+    got = stage.http.get(f"{base}/api/eyewitness/v1/templates",
+                         headers=headers, timeout=30)
+    body = got.json() if got.status_code == 200 else {}
+    names = [t.get("template") for t in body.get("templates") or []]
+    step("templates listed", got.status_code == 200
+         and "screen_photo" in names, f"http={got.status_code}")
+    bad = stage.http.get(f"{base}/api/eyewitness/v1/templates",
+                         timeout=30)
+    step("templates refused with no key", bad.status_code == 401,
+         f"http={bad.status_code}")
+    made = stage.http.post(
+        f"{base}/api/eyewitness/v1/requests", headers=headers,
+        json={"templates": ["screen_photo"], "questions": ["since_when"],
+              "external_ref": "e2e-api-check"}, timeout=30)
+    created = made.json() if made.status_code == 201 else {}
+    step("request created", made.status_code == 201
+         and bool(created.get("id")), f"http={made.status_code}")
+    if not created.get("id"):
+        return
+    text = created.get("customer_text") or ""
+    step("customer text is template wording",
+         "/eyewitness/" in text and "wegcoin" not in text.lower()
+         and "muse" not in text.lower(), "")
+    step("link and expiry returned",
+         bool(created.get("link")) and bool(created.get("expires_at")),
+         "")
+    read = stage.http.get(
+        f"{base}/api/eyewitness/v1/requests/{created['id']}",
+        headers=headers, timeout=30)
+    read_body = read.json() if read.status_code == 200 else {}
+    step("request read back", read.status_code == 200
+         and read_body.get("status") == "open",
+         f"http={read.status_code}")
+    other = stage.http.get(
+        f"{base}/api/eyewitness/v1/requests/999999999",
+        headers=headers, timeout=30)
+    step("unknown request is not found", other.status_code == 404,
+         f"http={other.status_code}")
+    cancelled = stage.http.post(
+        f"{base}/api/eyewitness/v1/requests/{created['id']}/cancel",
+        headers=headers, json={}, timeout=30)
+    step("request cancelled",
+         cancelled.status_code == 200
+         and (cancelled.json() or {}).get("status") == "cancelled",
+         f"http={cancelled.status_code}")
+
+
 SCENARIOS = {"email": scenario_email, "help": scenario_help,
              "video": scenario_video, "voice": scenario_voice,
-             "injection": scenario_injection}
+             "injection": scenario_injection, "webhook": scenario_webhook,
+             "api": scenario_api}
 
 
 def main() -> int:
@@ -667,11 +788,14 @@ def main() -> int:
     parser.add_argument("--injection-image", default="",
                         help="path to the sticky note photo "
                              "(injection scenario)")
+    parser.add_argument("--api-key", default="",
+                        help="Evidence API key for the api scenario. "
+                             "Defaults to EYEWITNESS_API_KEY.")
     parser.add_argument("--device", default="RECEPTION-PC",
                         help="the managed device for the help scenario")
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
-    if args.scenario in ("email", "help") and not args.golden:
+    if args.scenario in ("email", "help", "webhook") and not args.golden:
         print("FAIL golden image supplied - pass --golden")
         return 1
 

@@ -1,0 +1,353 @@
+openapi: 3.1.0
+info:
+  title: Eyewitness Evidence API
+  version: 1.0.0
+  description: >
+    Ask a customer for evidence and read the readings back. Customer
+    text in responses comes from fixed templates on the server.
+    Readings travel inside an untrusted fence with injection flags.
+servers:
+  - url: https://app.wegweiser.tech
+security:
+  - bearerKey: []
+paths:
+  /api/eyewitness/v1/templates:
+    get:
+      summary: List evidence templates and quick questions
+      operationId: listTemplates
+      responses:
+        '200':
+          description: Template catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Templates'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+  /api/eyewitness/v1/requests:
+    post:
+      summary: Create one evidence request
+      operationId: createRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/CreateExplicit'
+                - $ref: '#/components/schemas/CreateAuto'
+            examples:
+              explicit:
+                value:
+                  templates: [screen_photo, power_light_video]
+                  questions: [since_when]
+                  external_ref: "ticket-4815"
+              auto:
+                value:
+                  auto: true
+                  ticket_text: "PC keeps crashing with a blue screen"
+                  external_ref: "ticket-4815"
+      responses:
+        '201':
+          description: Request created. Post customer_text to the ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedRequest'
+        '200':
+          description: Auto mode found nothing to ask for
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  needs_evidence:
+                    type: boolean
+                  reason:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/eyewitness/v1/requests/{id}:
+    get:
+      summary: Read one request, its items and its readings
+      operationId: getRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Status, items and fenced readings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/eyewitness/v1/requests/{id}/release:
+    post:
+      summary: Release one request so its ticket moves on
+      operationId: releaseRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Release result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseResult'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/eyewitness/v1/requests/{id}/cancel:
+    post:
+      summary: Cancel one request. Its link stops working.
+      operationId: cancelRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Cancel result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseResult'
+        '401':
+          $ref: '#/components/responses/Unauthorised'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /eyewitness/hooks/zammad/{hookId}:
+    post:
+      summary: Zammad ticket created push
+      description: >
+        Signed by Zammad with HMAC-SHA1 in X-Hub-Signature as
+        sha1=<hex> over the raw body. One hook id per tenant. A
+        ticket that is already indexed answers 200 and changes
+        nothing.
+      security: []
+      parameters:
+        - name: hookId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Hub-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ticket:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+      responses:
+        '200':
+          description: Indexed, or already indexed
+        '401':
+          description: Bad signature
+        '404':
+          description: Unknown hook id
+        '413':
+          description: Body too large
+components:
+  securitySchemes:
+    bearerKey:
+      type: http
+      scheme: bearer
+      description: Evidence API key shown once at creation, ew_ prefix
+  parameters:
+    RequestId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+  responses:
+    BadRequest:
+      description: Request refused
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorised:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Key lacks the scope this endpoint needs
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: No request with this id for this tenant
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Too many calls. Wait for the window to pass.
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    Templates:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Template'
+        questions:
+          type: array
+          items:
+            type: object
+            properties:
+              template:
+                type: string
+              title:
+                type: string
+              options:
+                type: array
+                items:
+                  type: string
+    Template:
+      type: object
+      properties:
+        template:
+          type: string
+          example: screen_photo
+        kind:
+          type: string
+          enum: [photo, video, voice]
+        title:
+          type: string
+        instruction:
+          type: string
+        max_seconds:
+          type: [integer, 'null']
+        next_time:
+          type: boolean
+    CreateExplicit:
+      type: object
+      properties:
+        templates:
+          type: array
+          maxItems: 4
+          items:
+            type: string
+        questions:
+          type: array
+          maxItems: 2
+          items:
+            type: string
+        external_ref:
+          type: string
+    CreateAuto:
+      type: object
+      required: [auto, ticket_text]
+      properties:
+        auto:
+          type: boolean
+          const: true
+        ticket_text:
+          type: string
+        external_ref:
+          type: string
+    CreatedRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        customer_text:
+          type: string
+          description: Template wording for the desk to post to the customer
+        link:
+          type: string
+          format: uri
+        expires_at:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+        needs_evidence:
+          type: boolean
+    EvidenceRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [needs_approval, open, submitted, expired, cancelled]
+        source:
+          type: string
+        external_ref:
+          type: [string, 'null']
+        items:
+          type: array
+          items:
+            type: object
+        expires_at:
+          type: integer
+        readings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reading'
+        customer_evidence:
+          type: string
+          description: Readings inside the untrusted fence
+    Reading:
+      type: object
+      properties:
+        capture_id:
+          type: [integer, 'null']
+        item_id:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        untrusted:
+          type: boolean
+          const: true
+        injection_flag:
+          type: boolean
+        reading:
+          type: [object, 'null']
+        retake:
+          type: [object, 'null']
+        skip_reason:
+          type: [string, 'null']
+    ReleaseResult:
+      type: object
+      properties:
+        id:
+          type: integer
+        released:
+          type: boolean
+        status:
+          type: string

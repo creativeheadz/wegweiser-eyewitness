@@ -247,6 +247,12 @@ def done(token):
         maybe_release_for_request(row.id, done=True)
     except Exception:
         pass
+    if not has_next_time and getattr(row, "api_key_id", None):
+        try:
+            from app.eyewitness import callbacks as ew_callbacks
+            ew_callbacks.fire(row.id, "evidence.completed")
+        except Exception:
+            pass
     return jsonify({"done": True, "stays_open": has_next_time})
 
 

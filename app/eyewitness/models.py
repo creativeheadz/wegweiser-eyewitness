@@ -69,10 +69,19 @@ class EvidenceRequest(db.Model):
         db.BigInteger,
         db.ForeignKey("eyewitness_intake_runs.id", ondelete="SET NULL"),
         nullable=True)
+    # Nullable since Phase 5: a request created through the Evidence API
+    # for an external desk has no HelpdeskTicket row until that desk is
+    # polled or pushed in. Desk-born requests always carry one.
     helpdesk_ticket_id = db.Column(
         db.BigInteger,
         db.ForeignKey("helpdesk_tickets.id", ondelete="CASCADE"),
-        nullable=False, index=True)
+        nullable=True, index=True)
+    source = db.Column(db.String(16), nullable=True, default="desk")
+    external_ref = db.Column(db.String(200), nullable=True)
+    api_key_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eyewitness_api_keys.id", ondelete="SET NULL"),
+        nullable=True, index=True)
     token = db.Column(db.String(64), nullable=False, unique=True, index=True)
     items = db.Column(JSONB, nullable=False, default=list)
     customer_text = db.Column(db.Text, nullable=True)
@@ -164,5 +173,58 @@ class TenantSettings(db.Model):
                             primary_key=True)
     enabled = db.Column(db.Boolean, nullable=False, default=False)
     auto_send_templates = db.Column(db.Boolean, nullable=False, default=True)
+    # Phase 5 webhook identity. The hook id is the public half of the
+    # Zammad push address. The HMAC secret lives in the secret store
+    # under eyewitness_webhook_secret:<tenant_uuid> and never here.
+    webhook_hook_id = db.Column(db.String(64), nullable=True, unique=True,
+                                index=True)
     updated_at = db.Column(db.BigInteger, nullable=False, default=_now,
                            onupdate=_now)
+
+
+class ApiKey(db.Model):
+    """One Evidence API key for one tenant (Phase 5).
+
+    The plaintext key is shown once at creation. Only its SHA-256 hash
+    and a short visible prefix stay in this table. The callback secret,
+    where a callback URL is set, lives in the secret store under
+    eyewitness_callback_secret:<id> and never here.
+    """
+    __tablename__ = "eyewitness_api_keys"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    tenant_uuid = db.Column(UUID(as_uuid=True),
+                            db.ForeignKey("tenants.tenantuuid", ondelete="CASCADE"),
+                            nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False, default="")
+    key_prefix = db.Column(db.String(16), nullable=False, index=True)
+    key_hash = db.Column(db.String(64), nullable=False)
+    scopes = db.Column(JSONB, nullable=False, default=list)
+    callback_url = db.Column(db.String(500), nullable=True)
+    last_used_at = db.Column(db.BigInteger, nullable=True)
+    revoked_at = db.Column(db.BigInteger, nullable=True)
+    created_at = db.Column(db.BigInteger, nullable=False, default=_now)
+    created_by = db.Column(UUID(as_uuid=True), nullable=True)
+
+
+class CallbackDelivery(db.Model):
+    """One signed callback attempt set for one API request (Phase 5)."""
+    __tablename__ = "eyewitness_callback_deliveries"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    api_key_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eyewitness_api_keys.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    request_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eyewitness_requests.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+    event = db.Column(db.String(32), nullable=False)
+    payload = db.Column(JSONB, nullable=True)
+    status = db.Column(db.String(16), nullable=False, default="pending")
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    last_error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.BigInteger, nullable=False, default=_now)
+    delivered_at = db.Column(db.BigInteger, nullable=True)
+    next_attempt_at = db.Column(db.BigInteger, nullable=True)

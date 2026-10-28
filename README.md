@@ -118,6 +118,37 @@ Customer evidence is untrusted input. It is a stranger's photo of a screen, and 
 
 The other defences live in `app/eyewitness/security.py` and the modules beside it. Uploads are checked by their content, whatever type they claim. Captures are stored under UUID names with a SHA-256 hash, outside any path the web server serves. Links are 256-bit tokens scoped to one request and set to expire, uploads are rate-limited, and contributor models are refused for customer evidence. The full design is in [the architecture doc](eyewitness/docs/architecture.md).
 
+## Integrations
+
+Eyewitness plugs into the desk a team already runs. No new inbox is
+needed.
+
+**Zammad, pushed at once.** A Zammad Trigger calls Eyewitness when a
+ticket is created, so evidence work starts with no wait for the poll.
+The push endpoint checks Zammad's HMAC-SHA1 signature in constant
+time. One shell command makes the webhook and the trigger in Zammad,
+with the admin token typed at run time and never stored. The five
+minute poll stays as the fallback, and a ticket pushed twice is
+indexed once.
+
+**Any desk, through the Evidence API.** A per tenant key opens
+`/api/eyewitness/v1/`. A desk, or a workflow in n8n, Zapier or Power
+Automate, lists templates, creates a request from template names or
+from ticket wording, then posts the returned customer text to its
+ticket. Readings come back fenced as untrusted data, with injection
+flags in view. A signed callback reports each reading, each finished
+request and each expired link, with retries. The contract sits in
+`eyewitness/docs/openapi.yaml`, with curl examples in
+`eyewitness/docs/api.md`.
+
+**Any agent, through MCP.** The server in `eyewitness/mcp/` wraps the
+API as five tools: list templates, request evidence, get evidence,
+release and cancel. It speaks stdio and streamable HTTP, and reads
+`EYEWITNESS_API_URL` and `EYEWITNESS_API_KEY` from its environment.
+A Muse Spark demo agent in the same folder calls those tools as
+functions, polls for readings, then writes a summary for a
+technician.
+
 ## Status
 
 Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 4 were built and tested on 28 Oct 2026.** On a staging server five end-to-end scenarios passed: a ticket by email, a ticket from the help button, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. The media for the last three were made for the test and are marked synthetic. Items marked ✅ are in the code in this repo.

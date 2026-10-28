@@ -586,6 +586,13 @@ def release_run(run_id) -> bool:
         except Exception:
             logger.exception("eyewitness: summary post failed on run %s",
                              run.id)
+    if req_row is not None:
+        try:
+            from app.eyewitness import callbacks as ew_callbacks
+            ew_callbacks.fire(req_row.id, "evidence.completed")
+        except Exception:
+            logger.exception("eyewitness: completion callback failed "
+                             "on run %s", run.id)
     try:
         from app.tasks.helpdesk import triage_helpdesk_ticket
         triage_helpdesk_ticket.delay(run.helpdesk_ticket_id)
@@ -682,6 +689,12 @@ def sweep_timeouts() -> dict:
         row.status = "expired"
         expired += 1
     db.session.commit()
+    for row in rows:
+        try:
+            from app.eyewitness import callbacks as ew_callbacks
+            ew_callbacks.fire(row.id, "evidence.expired")
+        except Exception:
+            logger.exception("eyewitness: expiry callback failed")
     released = 0
     for row in rows:
         if row.intake_run_id and maybe_release_for_request(row.id):

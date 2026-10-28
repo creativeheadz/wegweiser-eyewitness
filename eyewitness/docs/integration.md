@@ -19,5 +19,10 @@ Every edit outside `app/eyewitness/`, `app/templates/eyewitness/`,
 | `app/templates/helpdesk/help_form.html` | The phone QR section and polling script on the sent page (S1) | 3 |
 | `app/utilities/csp.py` | `media-src 'self' blob:` and `blob:` in `img-src` for the live camera previews | 3 |
 | `app/translations/de/LC_MESSAGES/messages.po` | Two S1 strings from the sanctioned catalogue update, with German text filled in | 3 |
+| `app/__init__.py` | Register `eyewitness_api_bp`, CSRF-exempt the signed webhook and keyed API views, register the Phase 5 shell commands, inject the hook address for Ticket settings | 5 |
+| `app/utilities/helpdesk_inbound.py` | `hand_over_new_ticket` shared by the poll and the push; `ingest_ticket` for one pushed ticket | 5 |
+| `app/celery_app.py` | Import the callback delivery task beside the Eyewitness tasks | 5 |
+| `migrations/versions/eyewitness_api_20261029.py` | API keys, callback deliveries, webhook hook id, API request columns | 5 |
+| `app/templates/helpdesk/settings.html` | Eyewitness connections panel: hook address, key list, key creation form | 5 |
 
 No changes to `case_engine.py` or the case models, ever (brief 6.2).
