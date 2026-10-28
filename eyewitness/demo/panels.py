@@ -2,7 +2,9 @@
 """Muse Image panels for the demo scenes.
 
 Reads panels.yaml beside this file and writes one PNG per panel into
-the demo folder under panels/. A panel that already sits in the demo
+the demo folder under panels/. Panels are asked for at 1920 by 1080,
+which Muse Image returns at 2048 by 1152, so a panel fills the 16:9
+frame with no black bars. A panel that already sits in the demo
 folder is kept, so a rebuild spends nothing. Each new generation
 costs one cent through the Eyewitness Meta key. No text goes inside
 any picture; captions are added in the edit.
@@ -49,7 +51,7 @@ def generate(demo_dir: Path, *, force: bool = False) -> list[Path]:
         client = OpenAI(api_key=key, base_url="https://api.meta.ai/v1")
         resp = client.images.generate(model="muse-image-1.0",
                                       prompt=prompt, n=1,
-                                      size="1024x1024")
+                                      size="1920x1080")
         data = (resp.data or [None])[0]
         blob = None
         b64 = getattr(data, "b64_json", None) if data else None
