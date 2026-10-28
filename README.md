@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Muse_Voice_Transcribe-voice_notes-E8833A" alt="Muse Voice Transcribe">
   <img src="https://img.shields.io/badge/Muse_Image-artwork-F2B33D" alt="Muse Image">
   <img src="https://img.shields.io/badge/Python_/_Flask-backend-3776AB" alt="Python and Flask">
-  <img src="https://img.shields.io/badge/status-Phase_3_of_4-F59E0B" alt="Status: Phase 3 of 4">
+  <img src="https://img.shields.io/badge/status-Phase_4_of_4-2E7D32" alt="Status: Phase 4 of 4">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-see_LICENSE-6B7280" alt="Licence: see LICENSE"></a>
 </p>
 
@@ -120,18 +120,18 @@ The other defences live in `app/eyewitness/security.py` and the modules beside i
 
 ## Status
 
-Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 3 of 4 were built and tested on 28 Oct 2026.** On a staging server five end-to-end scenarios passed: a ticket by email, a ticket from the help button, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. The media for the last three were made for the test and are marked synthetic. Items marked ✅ are in the code in this repo. Everything else names the phase that will build it.
+Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 4 were built and tested on 28 Oct 2026.** On a staging server five end-to-end scenarios passed: a ticket by email, a ticket from the help button, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. The media for the last three were made for the test and are marked synthetic. Items marked ✅ are in the code in this repo.
 
 | Area | Built by 28 Oct 2026 ✅ | Next 🔜 |
 |---|---|---|
 | Spikes | ✅ Synthetic blue screen, sticker and blink clip generated locally and sent to the live Meta API; SAM's streamed wire format measured and the parser fitted to it | Captures from physical machines for the golden set (Phase 4) |
 | Intake | ✅ The hook on new tickets from the helpdesk poll and the help button, the live Spark intake, and validation of its output (strict schema, templates only, at most 4 items and 2 questions); hold and release with a 24 hour safety timeout; the QR code on the help form sent page (S1) | - |
 | Customer page | ✅ Ordered checklist, live camera preview with countdown and timers, upload with an in-browser and a server-side quality verdict, skip per item, quick answers, a voice-note offer when everything is skipped, Done, and an item that can stay open for seven days | - |
-| Readers | ✅ Quality gate shared by the phone and the server; Spark screen and sticker reads on live captures; SAM 3.1 following the light, with code counting and the Dell pattern table; voice notes by batch transcribe and a Spark summary; beep codes from the audio track (S3); retake advice from fixed sentences | Reader accuracy on the golden set (Phase 4) |
+| Readers | ✅ Quality gate shared by the phone and the server; Spark screen and sticker reads on live captures; SAM 3.1 following the light, with code counting and the Dell pattern table; voice notes by batch transcribe and a Spark summary; beep codes from the audio track (S3); retake advice from fixed sentences | - |
 | Summary | ✅ The structured internal note posted to the ticket, with readings fenced as untrusted, injection flags and the Meta cost per ticket; the ticket view figure held against the call log by a test; the release to the governor exactly once | - |
-| Helpdesk connectors | ✅ Zammad implemented; Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs with API notes | The remaining connectors (roadmap) |
-| Safety | ✅ Outgoing filter, untrusted fence, upload sniffing, expiring scoped tokens, rate limits on every public route, a per-call cost log with a daily cap, a retention sweep for capture files, and a clean fallback when no key is set; the sticky note injection flagged on a live read | The injection demo with a physical note (demo captures) |
-| Tests | ✅ 47 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, video, voice and injection scenarios for staging | Reader accuracy on the golden set, `eyewitness/tools/eval.py` (Phase 4) |
+| Helpdesk connectors | ✅ Zammad implemented; Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs with API notes | The remaining connectors sit in the roadmap below |
+| Safety | ✅ Outgoing filter, untrusted fence, upload sniffing, expiring scoped tokens, rate limits on every public route, a per-call cost log with a daily cap, a retention sweep for capture files, and a clean fallback when no key is set; the sticky note injection flagged on a live read | - |
+| Tests | ✅ 57 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, video, voice and injection scenarios for staging | - |
 
 <details>
 <summary><strong>The four phases</strong></summary>
@@ -139,9 +139,26 @@ Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases
 - **Phase 1 (done, 28 Oct 2026):** spikes against the live API, the package skeleton, the data model and migration, the security rules as tested pure functions, the customer page, the technician panel and the Zammad connector.
 - **Phase 2 (done, 28 Oct 2026):** the intake hook on new tickets, the live Spark intake, the screen and sticker readers on live captures, the internal summary posted to the ticket, and the handover that releases the ticket to triage exactly once.
 - **Phase 3 (done, 28 Oct 2026):** SAM 3.1 following the light with code counting and blink decoding, voice notes (transcribe, then summarise), beep codes, live camera capture on the phone page, the help-form QR code, retention, and technician guide photos.
-- **Phase 4:** a golden set of captures from physical machines with per-reader accuracy and cost per ticket, the remaining helpdesk connectors, live video assist, on-prem readers and evidence-quality analytics.
+- **Phase 4 (done, 28 Oct 2026):** the reader evaluation over the golden set and the synthetic set, the phone page working one step at a time, and the demo kit with a draft video.
 
 </details>
+
+## Demo
+
+Video: link to follow. A draft cut sits with the generated demo files for now. The draft runs 2:45 with crossfades. Scenes 1, 2, 5, 7, 9 and 11 also sit in a vertical cut at 1080 by 1920.
+
+The kit in `eyewitness/demo/` builds the cut from `storyboard.yaml`. Comic panels come from Muse Image. Overlays draw the SAM tracking and the blink timeline in code. Phone recordings use Playwright with a fake camera fed from the synthetic clips. Desktop scenes need a sign-in that only Andrei holds, so the draft shows a plain card for scenes 3, 4 and 10. The voice in the draft comes from ffmpeg flite and each file name marks it as a placeholder. One command rebuilds the cut once the voice files and the desktop recordings sit in the demo folder.
+
+Reader scores from `eyewitness/tools/eval.py` on 28 Oct 2026 sit in full in the evaluation note. The golden set held one capture from a physical machine. The screen reader named the stop code on it. The synthetic set held eight files made on this machine. Each blink clip counted two amber flashes and three white flashes. The shaken clip with no light returned the light not found reason. Each voice file returned a transcript. The sticky note photo set the instruction flag. One ticket with an intake read, a screen photo, a light video and a voice note came to $0.0357 on that run. A second run over the same files read the cache and cost nothing.
+
+## Roadmap
+
+Work that sits past this build:
+
+- Zendesk, Freshdesk, HaloPSA and ConnectWise connectors against the same connector shape that Zammad uses.
+- Live video assist for a capture that needs a person at both ends.
+- Readers that run on the MSP side without a call out.
+- Evidence scores gathered across clients, so a team can see which requests come back unusable.
 
 ## Architecture
 
@@ -165,18 +182,19 @@ On publishing, `eyewitness/README.md` becomes this repo's root `README.md` and `
 ├── app/static/js/eyewitness/        # capture flow and panel behaviour
 ├── app/static/css/eyewitness/       # customer page styles
 ├── migrations/versions/             # eyewitness_20261027 (six tables), eyewitness_retention_20261028
-├── tests/eyewitness/                # 47 pure tests: no database, no paid calls
+├── tests/eyewitness/                # 57 pure tests: no database, no paid calls
 └── eyewitness/
     ├── docs/                        # architecture, integration, connectors, phase notes
     │   └── assets/                  # artwork on this page (Muse Image + Pillow wordmarks)
-    └── tools/                       # spike.py (the Phase 1 measurements), eval.py (Phase 4)
+    ├── demo/                        # storyboard, panels, overlays, recorders, build
+    └── tools/                       # spike.py (the Phase 1 measurements), eval.py
 ```
 
 Run the tests from a Wegweiser checkout with its dependencies installed:
 
 ```bash
 python -m pytest tests/eyewitness -q
-# 47 passed
+# 57 passed
 ```
 
 ## Credits

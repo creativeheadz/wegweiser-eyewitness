@@ -1,0 +1,82 @@
+# Eyewitness demo storyboard. One entry per scene from the approved
+# storyboard. Times add to 2:50. Captions use the approved voice-over
+# wording word for word. Voiceover paths are relative to the demo
+# folder (EYEWITNESS_DEMO_DIR) and may be absent until Andrei records.
+scenes:
+  - number: 1
+    start: "0:00"
+    duration: 10
+    visual: "panels/scene01-office.png"
+    voiceover: "voice/scene01.wav"
+    caption: "Monday, eight fifty-seven. Brenda's computer has opinions."
+    badge: null
+  - number: 2
+    start: "0:10"
+    duration: 12
+    visual: "panels/scene02-brenda.png"
+    voiceover: "voice/scene02.wav"
+    caption: "Every IT helpdesk knows this call. 'What does the screen say?' 'It went black. There's some tiny writing at the bottom.'"
+    badge: null
+  - number: 3
+    start: "0:22"
+    duration: 14
+    visual: "desktop/scene03.webm"
+    voiceover: "voice/scene03.wav"
+    caption: "Brenda raises a ticket. 'Black screen, now it just blinks.' Our agent lives on that PC, but a machine that won't boot can't report anything."
+    badge: "EXISTING WEGWEISER"
+  - number: 4
+    start: "0:36"
+    duration: 19
+    visual: "desktop/scene04.webm"
+    voiceover: "voice/scene04.wav"
+    caption: "Before anyone works the ticket, Eyewitness reads it and asks Brenda for exactly what's missing. Nobody at the helpdesk has typed anything yet."
+    badge: "NEW"
+  - number: 5
+    start: "0:55"
+    duration: 23
+    visual: "phone/scene05.webm"
+    voiceover: "voice/scene05.wav"
+    caption: "Brenda opens the link on her phone and goes through it one step at a time. If a photo is too blurry, the page tells her straight away, before anyone wastes time on it."
+    badge: "NEW"
+  - number: 6
+    start: "1:18"
+    duration: 14
+    visual: "phone/scene06.webm"
+    voiceover: "voice/scene06.wav"
+    caption: "Step two: film the little light for ten seconds."
+    badge: "NEW"
+  - number: 7
+    start: "1:32"
+    duration: 20
+    visual: "overlays/scene07.mp4"
+    voiceover: "voice/scene07.wav"
+    caption: "Meta's SAM 3.1 follows the light frame by frame, and a few lines of code count the flashes. Two amber, three white. On a Dell, that means the memory isn't detected."
+    badge: "NEW"
+  - number: 8
+    start: "1:52"
+    duration: 14
+    visual: "overlays/scene08.png"
+    voiceover: "voice/scene08.wav"
+    caption: "Muse Spark reads the small line at the bottom of the screen: memory management. Her voice note, recorded in German, arrives as an English summary."
+    badge: "NEW"
+  - number: 9
+    start: "2:06"
+    duration: 18
+    visual: "overlays/scene09.png"
+    voiceover: "voice/scene09.wav"
+    caption: "Anyone can write anything on a sticky note, so Eyewitness treats customer evidence as data only. The AI can't write to the customer at all. It can only pick from fixed requests that a technician controls."
+    badge: "NEW"
+  - number: 10
+    start: "2:24"
+    duration: 16
+    visual: "desktop/scene10.webm"
+    voiceover: "voice/scene10.wav"
+    caption: "The ticket now carries the evidence, and no technician has touched it yet. Our triage reads it and drafts the investigation: a memory fault, with nobody sent on site."
+    badge: "NEW"
+  - number: 11
+    start: "2:40"
+    duration: 10
+    visual: "panels/scene11-brenda.png"
+    voiceover: "voice/scene11.wav"
+    caption: "Wegweiser Eyewitness. When the agent goes dark, the user's phone becomes the sensor."
+    badge: null

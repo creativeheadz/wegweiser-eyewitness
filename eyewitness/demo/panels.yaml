@@ -1,0 +1,24 @@
+# Muse Image panels for scenes 1, 2 and 11. Warm flat illustration in
+# the style of the README artwork. No text inside any picture. The
+# captions are added in the edit, so lettering stays sharp. Each
+# generation costs one cent. Six panels in total.
+style: "Warm flat illustration, soft shapes, office colours with amber and teal accents, no text, no words, no letters, no logos"
+panels:
+  - file: "scene01-office.png"
+    scene: 1
+    prompt: "Open-plan office in the morning, a wall clock showing ten to nine, a desk with a monitor showing a plain black screen, a woman at the desk holding a phone to her ear, worried, flat illustration, warm light, no text"
+  - file: "scene02-brenda.png"
+    scene: 2
+    prompt: "A woman squinting at a dark computer monitor with a tiny line at the bottom, phone to her ear, puzzled, close view, flat illustration, warm colours, no text"
+  - file: "scene02-tech.png"
+    scene: 2
+    prompt: "An IT support worker with a headset at a desk, a very large cup of coffee beside the keyboard, listening with patience, flat illustration, warm colours, no text"
+  - file: "scene11-brenda.png"
+    scene: 11
+    prompt: "The same woman at her desk giving a thumbs up, her computer screen now showing a calm desktop, relieved, flat illustration, warm colours, no text"
+  - file: "scene11-tech.png"
+    scene: 11
+    prompt: "The same IT support worker leaning back and finally drinking from the large cup of coffee, relaxed, flat illustration, warm colours, no text"
+  - file: "scene01-desk.png"
+    scene: 1
+    prompt: "A desktop computer tower under a desk with a small power light, a monitor with a plain black screen on the desk above, morning office light, flat illustration, warm colours, no text"
