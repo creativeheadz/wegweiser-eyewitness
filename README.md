@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Muse_Voice_Transcribe-voice_notes-E8833A" alt="Muse Voice Transcribe">
   <img src="https://img.shields.io/badge/Muse_Image-artwork-F2B33D" alt="Muse Image">
   <img src="https://img.shields.io/badge/Python_/_Flask-backend-3776AB" alt="Python and Flask">
-  <img src="https://img.shields.io/badge/status-Phase_4_of_4-2E7D32" alt="Status: Phase 4 of 4">
+  <img src="https://img.shields.io/badge/status-Phases_1_to_5_built-2E7D32" alt="Status: Phases 1 to 5 built">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-PolyForm_Strict_1.0.0-6B7280" alt="Licence: PolyForm Strict 1.0.0"></a>
 </p>
 
@@ -153,7 +153,7 @@ technician.
 
 ## Status
 
-Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 4 were built and tested on 28 Oct 2026.** On a staging server five end-to-end scenarios passed: a ticket by email, a ticket from the help button, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. The media for the last three were made for the test and are marked synthetic. Items marked ✅ are in the code in this repo.
+Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 5 were built and tested on 28 Oct 2026.** On a staging server seven end-to-end scenarios passed: a ticket by email, a ticket from the help button, a ticket pushed by a Zammad webhook, a request through the Evidence API, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. A Muse Spark agent also requested evidence through the MCP server and wrote its summary for a technician. The media for the last three were made for the test and are marked synthetic. Items marked ✅ are in the code in this repo.
 
 | Area | Built by 28 Oct 2026 ✅ | Next 🔜 |
 |---|---|---|
@@ -164,15 +164,17 @@ Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases
 | Summary | ✅ The structured internal note posted to the ticket, with readings fenced as untrusted, injection flags and the Meta cost per ticket; the ticket view figure held against the call log by a test; the release to the governor exactly once | - |
 | Helpdesk connectors | ✅ Zammad implemented; Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs with API notes | The remaining connectors sit in the roadmap below |
 | Safety | ✅ Outgoing filter, untrusted fence, upload sniffing, expiring scoped tokens, rate limits on every public route, a per-call cost log with a daily cap, a retention sweep for capture files, and a clean fallback when no key is set; the sticky note injection flagged on a live read | - |
-| Tests | ✅ 57 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, video, voice and injection scenarios for staging | - |
+| Connectivity | ✅ A signed Zammad push webhook, with the poll as its fallback; Evidence API v1 with per-tenant keys, scopes and signed callbacks; an MCP server with five tools; a Muse Spark agent that works through them | Webhook setup for the other desks (roadmap) |
+| Tests | ✅ 85 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, webhook, API, video, voice and injection scenarios for staging | - |
 
 <details>
-<summary><strong>The four phases</strong></summary>
+<summary><strong>The five phases</strong></summary>
 
 - **Phase 1 (done, 28 Oct 2026):** spikes against the live API, the package skeleton, the data model and migration, the security rules as tested pure functions, the customer page, the technician panel and the Zammad connector.
 - **Phase 2 (done, 28 Oct 2026):** the intake hook on new tickets, the live Spark intake, the screen and sticker readers on live captures, the internal summary posted to the ticket, and the handover that releases the ticket to triage exactly once.
 - **Phase 3 (done, 28 Oct 2026):** SAM 3.1 following the light with code counting and blink decoding, voice notes (transcribe, then summarise), beep codes, live camera capture on the phone page, the help-form QR code, retention, and technician guide photos.
-- **Phase 4 (done, 28 Oct 2026):** the reader evaluation over the golden set and the synthetic set, the phone page working one step at a time, and the demo kit with a draft video.
+- **Phase 4 (done, 28 Oct 2026):** the reader evaluation over the golden set and the synthetic set, the phone page working one step at a time, and the demo kit with the final video.
+- **Phase 5 (done, 28 Oct 2026):** the connectivity layer: a signed Zammad push webhook, the Evidence API with keys and signed callbacks, and an MCP server that a Muse Spark agent works through.
 
 </details>
 
