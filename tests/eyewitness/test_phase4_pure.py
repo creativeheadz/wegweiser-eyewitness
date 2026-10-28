@@ -147,3 +147,78 @@ def test_large_touch_targets_in_stylesheet():
         encoding="utf-8")
     assert "min-height: 3rem" in css
     assert ".ew-logo" in css
+
+
+# -- Fix pass 1: item state, resume and stepper wiring -------------------
+
+def test_item_done_states_use_the_latest_capture():
+    from app.eyewitness.intake import first_unfinished_index, item_done_states
+    items = [{"id": "screen_photo"}, {"id": "power_light_video"},
+             {"id": "voice_note"}]
+    caps = [
+        {"item_id": "screen_photo", "kind": "photo", "status": "ok",
+         "created_at": 10, "id": 1},
+        {"item_id": "power_light_video", "kind": "video",
+         "status": "retake", "created_at": 11, "id": 2},
+    ]
+    states = item_done_states(items, caps)
+    assert states == {"screen_photo": True, "power_light_video": False,
+                      "voice_note": False}
+    assert first_unfinished_index(items, states) == 1
+    # A later retake undoes an earlier ok: the latest capture decides.
+    caps.append({"item_id": "screen_photo", "kind": "photo",
+                 "status": "retake", "created_at": 12, "id": 3})
+    states = item_done_states(items, caps)
+    assert states["screen_photo"] is False
+    assert first_unfinished_index(items, states) == 0
+    # Out-of-order rows still resolve by time, then by id.
+    caps2 = [
+        {"item_id": "screen_photo", "kind": "photo", "status": "ok",
+         "created_at": 20, "id": 9},
+        {"item_id": "screen_photo", "kind": "photo", "status": "retake",
+         "created_at": 10, "id": 8},
+    ]
+    assert item_done_states(items, caps2)["screen_photo"] is True
+
+
+def test_item_done_states_skipped_and_answered():
+    from app.eyewitness.intake import first_unfinished_index, item_done_states
+    items = [{"id": "screen_photo"}, {"id": "q_since_when"},
+             {"id": "voice_note"}]
+    caps = [
+        {"item_id": "screen_photo", "kind": "photo", "status": "skipped",
+         "created_at": 10, "id": 1},
+        {"item_id": "q_since_when", "kind": "answer", "status": "ok",
+         "created_at": 11, "id": 2},
+    ]
+    states = item_done_states(items, caps)
+    assert states == {"screen_photo": True, "q_since_when": True,
+                      "voice_note": False}
+    # The voice step a customer lands on after accepting the offer.
+    assert first_unfinished_index(items, states) == 2
+    all_done = item_done_states(items, caps + [
+        {"item_id": "voice_note", "kind": "voice", "status": "ok",
+         "created_at": 12, "id": 3}])
+    assert all(all_done.values())
+    # With nothing unfinished the stepper stays on the last step.
+    assert first_unfinished_index(items, all_done) == 2
+    assert item_done_states(items, []) == {
+        "screen_photo": False, "q_since_when": False, "voice_note": False}
+    assert first_unfinished_index([], {}) == 0
+
+
+def test_stepper_advances_focuses_and_resumes():
+    html = (ROOT / "app/templates/eyewitness/customer.html").read_text(
+        encoding="utf-8")
+    assert "item_states" in html
+    assert 'data-done="true"' in html
+    assert 'tabindex="-1"' in html
+    js = (ROOT / "app/static/js/eyewitness/capture.js").read_text(
+        encoding="utf-8")
+    assert "data-done" in js
+    assert ".focus()" in js
+    # Got it and Skipped both move to the next unfinished item.
+    assert "markDoneAndAdvance" in js
+    routes = (ROOT / "app/eyewitness/routes.py").read_text(encoding="utf-8")
+    assert "item_done_states" in routes
+    assert "item_states=item_states" in routes

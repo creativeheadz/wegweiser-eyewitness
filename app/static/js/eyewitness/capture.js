@@ -6,6 +6,58 @@
   var token = location.pathname.split("/").filter(Boolean)[1] || "";
   function post(path, opts) { return fetch("/eyewitness/" + token + path, opts); }
 
+  // Stepper state. The server marks finished items with data-done
+  // on a reload. With script off the plain list stays in view.
+  var itemEls = Array.prototype.slice.call(
+    document.querySelectorAll("[data-item-id]"));
+  var currentStep = 0;
+  var stepperReady = false;
+  function elIsDone(li) {
+    return !!(li && li.getAttribute("data-done") === "true");
+  }
+  function firstUnfinishedFrom(start) {
+    var i;
+    for (i = Math.max(0, start || 0); i < itemEls.length; i++) {
+      if (!elIsDone(itemEls[i])) return i;
+    }
+    for (i = 0; i < Math.min(start || 0, itemEls.length); i++) {
+      if (!elIsDone(itemEls[i])) return i;
+    }
+    return itemEls.length ? itemEls.length - 1 : 0;
+  }
+  function showStep(i) {
+    if (!itemEls.length) return;
+    currentStep = Math.max(0, Math.min(itemEls.length - 1, i));
+    itemEls.forEach(function (li, n) { li.hidden = n !== currentStep; });
+    var progress = document.querySelector("[data-progress]");
+    var nav = document.querySelector("[data-step-nav]");
+    if (progress) {
+      progress.textContent = "Step " + (currentStep + 1) + " of " + itemEls.length;
+      progress.hidden = false;
+    }
+    if (nav) {
+      nav.hidden = false;
+      var backBtn = nav.querySelector("[data-nav-back]");
+      var nextBtn = nav.querySelector("[data-nav-next]");
+      if (backBtn) backBtn.disabled = currentStep === 0;
+      if (nextBtn) nextBtn.disabled = currentStep === itemEls.length - 1;
+    }
+    var heading = itemEls[currentStep].querySelector("h2");
+    if (heading) {
+      if (!heading.getAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+      heading.focus();
+    }
+  }
+  function markDoneAndAdvance(li) {
+    if (li) li.setAttribute("data-done", "true");
+    if (!stepperReady || !itemEls.length) return;
+    var anyUnfinished = itemEls.some(function (el) { return !elIsDone(el); });
+    if (!anyUnfinished) return;
+    var idx = li ? itemEls.indexOf(li) : currentStep;
+    if (idx < 0) idx = currentStep;
+    showStep(firstUnfinishedFrom(idx + 1));
+  }
+
   // Numbers held with the server readers under one test:
   // quality.BRIGHT_MIN / HIGHLIGHT_MIN, video MIN_DURATION_S and
   // voice MIN_SECONDS / MAX_SECONDS / MIN_RMS.
@@ -52,7 +104,7 @@
   var POLL_TIMEOUT_MS = 5 * 60 * 1000;
   var POLL_TIMEOUT_MESSAGE = "Checking is taking longer than usual. Please try again.";
 
-  function uploadAndPoll(itemId, blob, filename, status) {
+  function uploadAndPoll(itemId, blob, filename, status, li) {
     status.textContent = "Sending…";
     var fd = new FormData();
     fd.append("item_id", itemId);
@@ -69,7 +121,7 @@
           }
           post("/capture/" + body.capture_id).then(function (r) { return r.json(); })
             .then(function (s) {
-              if (s.status === "ok") { clearInterval(poll); status.textContent = "Got it, thank you."; }
+              if (s.status === "ok") { clearInterval(poll); status.textContent = "Got it, thank you."; markDoneAndAdvance(li || null); }
               else if (s.status === "retake") { clearInterval(poll); status.textContent = "Please retake: " + (s.advice || ""); }
               else if (s.status === "failed") { clearInterval(poll); status.textContent = "That did not work. Please try again."; }
             });
@@ -90,9 +142,9 @@
       if (file.type.indexOf("image/") === 0) {
         checkImage(file, function (warn) {
           if (warn) { status.textContent = warn; return; }
-          uploadAndPoll(itemId, file, file.name || "photo.jpg", status);
+          uploadAndPoll(itemId, file, file.name || "photo.jpg", status, li);
         });
-      } else { uploadAndPoll(itemId, file, file.name || "capture", status); }
+      } else { uploadAndPoll(itemId, file, file.name || "capture", status, li); }
     });
 
     // Live capture. Where the camera is refused or missing the file
@@ -140,7 +192,7 @@
         checkImage(blob, function (warn) {
           if (warn) { status.textContent = warn; return; }
           stopStream(); if (takeBtn) takeBtn.hidden = true; if (startCam) startCam.hidden = false;
-          uploadAndPoll(itemId, blob, "photo.jpg", status);
+          uploadAndPoll(itemId, blob, "photo.jpg", status, li);
         });
       }, "image/jpeg", 0.9);
     });
@@ -189,7 +241,7 @@
           var blob = new Blob(chunks, { type: type });
           stopStream(); if (startCam) startCam.hidden = false;
           if (seconds < VIDEO_MIN_SECONDS) { status.textContent = TOO_SHORT_VIDEO; if (recVideo) recVideo.hidden = false; return; }
-          uploadAndPoll(itemId, blob, type.indexOf("mp4") >= 0 ? "video.mp4" : "video.webm", status);
+          uploadAndPoll(itemId, blob, type.indexOf("mp4") >= 0 ? "video.mp4" : "video.webm", status, li);
         };
         if (stopVideo) stopVideo.onclick = function () { if (rec.state !== "inactive") rec.stop(); };
         rec.start(500);
@@ -242,7 +294,7 @@
           if (seconds < VOICE_MIN_SECONDS) { status.textContent = TOO_SHORT_VOICE; return; }
           if (peakCount && (peakSum / peakCount) < VOICE_MIN_RMS) { status.textContent = TOO_QUIET_VOICE; return; }
           var type = rec.mimeType || "";
-          uploadAndPoll(itemId, blob, type.indexOf("mp4") >= 0 || type.indexOf("m4a") >= 0 ? "voice.m4a" : "voice.webm", status);
+          uploadAndPoll(itemId, blob, type.indexOf("mp4") >= 0 || type.indexOf("m4a") >= 0 ? "voice.m4a" : "voice.webm", status, li);
         };
         if (stopVoice) stopVoice.onclick = function () { if (rec.state !== "inactive") rec.stop(); };
         rec.start(500);
@@ -253,7 +305,7 @@
       btn.addEventListener("click", function () {
         post("/answer", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ item_id: itemId, answer: btn.getAttribute("data-answer-opt") }) })
-          .then(function () { status.textContent = "Got it, thank you."; });
+          .then(function () { status.textContent = "Got it, thank you."; markDoneAndAdvance(li); });
       });
     });
     var save = li.querySelector("[data-answer-save]");
@@ -261,7 +313,7 @@
       var box = li.querySelector("[data-answer-text]");
       post("/answer", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ item_id: itemId, answer: box ? box.value : "" }) })
-        .then(function () { status.textContent = "Got it, thank you."; });
+        .then(function () { status.textContent = "Got it, thank you."; markDoneAndAdvance(li); });
     });
     var skip = li.querySelector("[data-skip]");
     if (skip) skip.addEventListener("click", function () {
@@ -269,10 +321,12 @@
         body: JSON.stringify({ item_id: itemId, reason: "can't do this" }) })
         .then(function () {
           status.textContent = "Skipped.";
-          var statuses = document.querySelectorAll("[data-status]");
-          var allSkipped = Array.prototype.every.call(statuses, function (s) { return s.textContent === "Skipped."; });
-          var items = document.querySelectorAll("[data-item-id]");
-          if (allSkipped && items.length) {
+          li.setAttribute("data-skipped", "true");
+          markDoneAndAdvance(li);
+          var allSkipped = itemEls.length && itemEls.every(function (el) {
+            return el.getAttribute("data-skipped") === "true";
+          });
+          if (allSkipped) {
             var offer = document.querySelector("[data-voice-offer]");
             if (offer) offer.hidden = false;
           }
@@ -291,7 +345,7 @@
       body: JSON.stringify({ accept: false }) });
     document.querySelector("[data-voice-offer]").hidden = true;
   });
-  var doneBtn = document.querySelector("[data-done]");
+  var doneBtn = document.querySelector(".ew-done");
   if (doneBtn) doneBtn.addEventListener("click", function () {
     post("/done", { method: "POST" }).then(function (r) { return r.json(); })
       .then(function (b) {
@@ -305,29 +359,16 @@
 
   // One item at a time where script runs. The list stays as the
   // fallback with script off, so nothing is hidden in the markup.
+  // On a reload the stepper starts at the first unfinished item.
   (function initStepper() {
-    var items = Array.prototype.slice.call(
-      document.querySelectorAll("[data-item-id]"));
-    if (items.length < 2) return;
-    var progress = document.querySelector("[data-progress]");
+    if (itemEls.length < 2) return;
     var nav = document.querySelector("[data-step-nav]");
-    if (!progress || !nav) return;
+    if (!nav || !document.querySelector("[data-progress]")) return;
     var backBtn = nav.querySelector("[data-nav-back]");
     var nextBtn = nav.querySelector("[data-nav-next]");
-    var index = 0;
-    function show(i) {
-      index = Math.max(0, Math.min(items.length - 1, i));
-      items.forEach(function (li, n) { li.hidden = n !== index; });
-      progress.textContent = "Step " + (index + 1) + " of " + items.length;
-      progress.hidden = false;
-      nav.hidden = false;
-      if (backBtn) backBtn.disabled = index === 0;
-      if (nextBtn) nextBtn.disabled = index === items.length - 1;
-      var heading = items[index].querySelector("h2");
-      if (heading) heading.setAttribute("tabindex", "-1");
-    }
-    if (backBtn) backBtn.addEventListener("click", function () { show(index - 1); });
-    if (nextBtn) nextBtn.addEventListener("click", function () { show(index + 1); });
-    show(0);
+    if (backBtn) backBtn.addEventListener("click", function () { showStep(currentStep - 1); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { showStep(currentStep + 1); });
+    stepperReady = true;
+    showStep(firstUnfinishedFrom(0));
   })();
 })();

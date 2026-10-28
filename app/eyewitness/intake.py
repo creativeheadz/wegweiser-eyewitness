@@ -128,6 +128,62 @@ def is_complete(items, latest: dict, voice_offer: str) -> bool:
     return True
 
 
+def _capture_field(cap, name, default=None):
+    if isinstance(cap, dict):
+        return cap.get(name, default)
+    return getattr(cap, name, default)
+
+
+def item_done_states(items, captures) -> dict:
+    """One finished flag per request item, from its latest capture.
+
+    An item is finished when its latest capture is ok, when it was
+    skipped, or when it was answered. Captures may be rows or dicts.
+    The latest capture wins by its time, then by its id, so a retake
+    after an ok leaves the item unfinished.
+    """
+    latest: dict = {}
+    for pos, cap in enumerate(captures or []):
+        item_id = _capture_field(cap, "item_id")
+        if not item_id:
+            continue
+        stamp = (_capture_field(cap, "created_at") or 0,
+                 _capture_field(cap, "id") or pos, pos)
+        if item_id not in latest or stamp >= latest[item_id][0]:
+            latest[item_id] = (stamp, cap)
+    states: dict = {}
+    for item in items or []:
+        item_id = item.get("id") if isinstance(item, dict) else None
+        if not item_id:
+            continue
+        entry = latest.get(item_id)
+        if entry is None:
+            states[item_id] = False
+            continue
+        cap = entry[1]
+        status = _capture_field(cap, "status")
+        kind = _capture_field(cap, "kind")
+        states[item_id] = bool(
+            status in ("ok", "skipped", "answered") or kind == "answer")
+    return states
+
+
+def first_unfinished_index(items, states) -> int:
+    """Index of the first unfinished item, for the phone stepper.
+
+    With every item finished the last step stays in view. An empty
+    list gives 0.
+    """
+    items = list(items or [])
+    if not items:
+        return 0
+    for index, item in enumerate(items):
+        item_id = item.get("id") if isinstance(item, dict) else None
+        if not (states or {}).get(item_id):
+            return index
+    return len(items) - 1
+
+
 def max_hold_seconds() -> int:
     try:
         hours = float(os.environ.get("EYEWITNESS_MAX_HOLD_HOURS", "24"))

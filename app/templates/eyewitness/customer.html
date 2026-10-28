@@ -20,8 +20,8 @@
 
   <ol class="ew-items">
   {% for item in row.items %}
-    <li class="ew-item" data-item-id="{{ item.id }}" data-kind="{{ item.kind }}" data-max-seconds="{{ item.max_seconds or '' }}">
-      <h2>{{ loop.index }}. {{ item.title }}</h2>
+    <li class="ew-item" data-item-id="{{ item.id }}" data-kind="{{ item.kind }}" data-max-seconds="{{ item.max_seconds or '' }}"{% if (item_states or {}).get(item.id) %} data-done="true"{% endif %}>
+      <h2 tabindex="-1">{{ loop.index }}. {{ item.title }}</h2>
       <p>{{ item.instruction }}</p>
       {% if guides.get(item.id) %}
       <p><img class="ew-guide" src="{{ guides.get(item.id) }}" alt="Guide photo from your support team"></p>

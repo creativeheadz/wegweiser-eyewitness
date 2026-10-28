@@ -87,8 +87,18 @@ def customer_page(token):
             guides[item.get("id")] = url_for(
                 "eyewitness_bp.own_file", token=token,
                 capture_id=int(guide_id))
+    # Each item's state for a reload: finished when its latest
+    # capture is ok, or it was skipped or answered. The template
+    # marks finished items and the stepper starts at the first
+    # unfinished one, so accepting the voice offer lands on the
+    # new voice step.
+    from app.eyewitness.intake import item_done_states
+    from app.eyewitness.models import Capture
+    caps = (Capture.query.filter_by(request_id=row.id)
+            .order_by(Capture.created_at.asc(), Capture.id.asc()).all())
+    item_states = item_done_states(row.items or [], caps)
     return render_template("eyewitness/customer.html", row=row,
-                           guides=guides,
+                           guides=guides, item_states=item_states,
                            msp_name=msp_name, msp_logo_url=msp_logo_url,
                            next_time_days=next_time_days, token=token)
 
