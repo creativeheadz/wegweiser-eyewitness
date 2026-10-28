@@ -14,6 +14,16 @@
     <p><a href="{{ base }}/eyewitness/{{ r.token }}">{{ base }}/eyewitness/{{ r.token }}</a></p>
     {% if qr.get(r.token) %}<p><img src="{{ qr[r.token] }}" alt="QR code for the evidence link" width="160" height="160"></p>{% endif %}
     {% if r.filter_hits %}<p>Outgoing filter: {{ r.filter_hits }}</p>{% endif %}
+    {% if r.reason_for_technician %}<p>{{ r.reason_for_technician }}</p>{% endif %}
+    {% if r.status == 'needs_approval' %}
+    <p>
+      <button type="button" class="fk-btn fk-btn--sm" data-ew-approve="{{ r.id }}">Send request</button>
+      <button type="button" class="fk-btn fk-btn--sm" data-ew-cancel="{{ r.id }}">Cancel request</button>
+    </p>
+    {% endif %}
+    {% if r.intake_run_id and r.status in ('open', 'needs_approval') %}
+    <p><button type="button" class="fk-btn fk-btn--sm" data-ew-release="{{ r.id }}">Release to the governor now</button></p>
+    {% endif %}
   </div>
   {% endfor %}
   <form data-ew-form>

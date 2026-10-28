@@ -59,6 +59,20 @@
         });
       } else { status.textContent = "Sending…"; send(); }
     });
+    li.querySelectorAll("[data-answer-opt]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        post("/answer", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item_id: itemId, answer: btn.getAttribute("data-answer-opt") }) })
+          .then(function () { status.textContent = "Got it, thank you."; });
+      });
+    });
+    var save = li.querySelector("[data-answer-save]");
+    if (save) save.addEventListener("click", function () {
+      var box = li.querySelector("[data-answer-text]");
+      post("/answer", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: itemId, answer: box ? box.value : "" }) })
+        .then(function () { status.textContent = "Got it, thank you."; });
+    });
     var skip = li.querySelector("[data-skip]");
     if (skip) skip.addEventListener("click", function () {
       post("/skip", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -79,8 +93,7 @@
   var accept = document.querySelector("[data-voice-accept]");
   if (accept) accept.addEventListener("click", function () {
     post("/voice-offer", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accept: true }) });
-    document.querySelector("[data-voice-offer]").hidden = true;
+      body: JSON.stringify({ accept: true }) }).then(function () { location.reload(); });
   });
   var decline = document.querySelector("[data-voice-decline]");
   if (decline) decline.addEventListener("click", function () {

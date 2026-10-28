@@ -127,6 +127,7 @@ def capture_status(token, capture_id):
 
 
 @eyewitness_bp.route("/eyewitness/<token>/skip", methods=["POST"])
+@limiter.limit("30 per hour")
 def skip(token):
     from app.eyewitness.models import Capture
     row = _open_or_none(_by_token(token))
@@ -141,37 +142,63 @@ def skip(token):
                   skip_reason=str(payload.get("reason") or "")[:200])
     db.session.add(cap)
     db.session.commit()
+    try:
+        from app.eyewitness.intake import maybe_release_for_request
+        maybe_release_for_request(row.id)
+    except Exception:
+        pass
     return jsonify({"skipped": item["id"]})
 
 
 @eyewitness_bp.route("/eyewitness/<token>/answer", methods=["POST"])
+@limiter.limit("30 per hour")
 def answer(token):
     from app.eyewitness.models import Capture
     row = _open_or_none(_by_token(token))
     if row is None or not row.is_open:
         return jsonify({"error": "link expired"}), 410
     payload = request.get_json(silent=True) or {}
-    cap = Capture(request_id=row.id,
-                  item_id=str(payload.get("item_id") or "")[:64],
+    item = _item(row, str(payload.get("item_id") or ""))
+    if item is None:
+        return jsonify({"error": "unknown item"}), 400
+    cap = Capture(request_id=row.id, item_id=item["id"],
                   kind="answer", status="ok",
                   reading={"answer": str(payload.get("answer") or "")[:500]})
     db.session.add(cap)
     db.session.commit()
+    try:
+        from app.eyewitness.intake import maybe_release_for_request
+        maybe_release_for_request(row.id)
+    except Exception:
+        pass
     return jsonify({"saved": True})
 
 
 @eyewitness_bp.route("/eyewitness/<token>/voice-offer", methods=["POST"])
+@limiter.limit("30 per hour")
 def voice_offer(token):
     row = _open_or_none(_by_token(token))
     if row is None:
         return jsonify({"error": "link expired"}), 410
     payload = request.get_json(silent=True) or {}
-    row.voice_offer = "accepted" if payload.get("accept") else "declined"
+    accepted = bool(payload.get("accept"))
+    row.voice_offer = "accepted" if accepted else "declined"
+    if accepted and not any(i.get("template") == "voice_note"
+                             for i in (row.items or [])):
+        from app.eyewitness import requests as ew_requests
+        row.items = list(row.items or []) + [
+            ew_requests.make_item("voice_note")]
     db.session.commit()
+    try:
+        from app.eyewitness.intake import maybe_release_for_request
+        maybe_release_for_request(row.id)
+    except Exception:
+        pass
     return jsonify({"voice_offer": row.voice_offer})
 
 
 @eyewitness_bp.route("/eyewitness/<token>/done", methods=["POST"])
+@limiter.limit("30 per hour")
 def done(token):
     row = _open_or_none(_by_token(token))
     if row is None:
@@ -182,6 +209,11 @@ def done(token):
         row.status = "submitted"
         row.submitted_at = int(time.time())
     db.session.commit()
+    try:
+        from app.eyewitness.intake import maybe_release_for_request
+        maybe_release_for_request(row.id, done=True)
+    except Exception:
+        pass
     return jsonify({"done": True, "stays_open": has_next_time})
 
 
@@ -192,7 +224,10 @@ def own_file(token, capture_id):
     cap = db.session.get(Capture, capture_id)
     if row is None or cap is None or cap.request_id != row.id or not cap.file_path:
         abort(404)
-    return send_file(cap.file_path, mimetype=cap.mime or "application/octet-stream")
+    resp = send_file(cap.file_path,
+                     mimetype=cap.mime or "application/octet-stream")
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 # ── technician ────────────────────────────────────────────────────────
@@ -304,6 +339,87 @@ def _deliver(rec, row) -> dict | None:
         return row.delivered_via
 
 
+@eyewitness_bp.route(
+    "/helpdesk/tickets/<int:ticket_id>/evidence/<int:req_id>/approve",
+    methods=["POST"])
+def approve_request(ticket_id, req_id):
+    from app.utilities.app_access_login_required import login_required
+
+    @login_required
+    def _view():
+        from app.eyewitness.models import REQ_OPEN, EvidenceRequest
+        rec = _ticket_or_404(ticket_id)
+        row = db.session.get(EvidenceRequest, req_id)
+        if row is None or row.helpdesk_ticket_id != rec.id:
+            abort(404)
+        if row.status != "needs_approval":
+            return jsonify({"error": "not waiting for approval"}), 400
+        if row.filter_hits:
+            return jsonify({"error": "outgoing filter blocked this text",
+                            "filter_hits": row.filter_hits}), 400
+        row.status = REQ_OPEN
+        try:
+            from app.utilities.current_user import current_user_uuid
+            row.approved_by = current_user_uuid()
+        except Exception:
+            row.approved_by = None
+        row.approved_at = int(time.time())
+        db.session.commit()
+        delivered = _deliver(rec, row)
+        return jsonify({"request_id": row.id, "status": row.status,
+                        "delivered": delivered})
+    return _view()
+
+
+@eyewitness_bp.route(
+    "/helpdesk/tickets/<int:ticket_id>/evidence/<int:req_id>/cancel",
+    methods=["POST"])
+def cancel_request(ticket_id, req_id):
+    from app.utilities.app_access_login_required import login_required
+
+    @login_required
+    def _view():
+        from app.eyewitness.models import EvidenceRequest
+        rec = _ticket_or_404(ticket_id)
+        row = db.session.get(EvidenceRequest, req_id)
+        if row is None or row.helpdesk_ticket_id != rec.id:
+            abort(404)
+        row.status = "cancelled"
+        db.session.commit()
+        released = False
+        try:
+            from app.eyewitness.intake import maybe_release_for_request
+            released = maybe_release_for_request(row.id, manual=True)
+        except Exception:
+            pass
+        return jsonify({"request_id": row.id, "status": row.status,
+                        "released": released})
+    return _view()
+
+
+@eyewitness_bp.route(
+    "/helpdesk/tickets/<int:ticket_id>/evidence/<int:req_id>/release",
+    methods=["POST"])
+def release_now(ticket_id, req_id):
+    from app.utilities.app_access_login_required import login_required
+
+    @login_required
+    def _view():
+        from app.eyewitness.models import EvidenceRequest
+        rec = _ticket_or_404(ticket_id)
+        row = db.session.get(EvidenceRequest, req_id)
+        if row is None or row.helpdesk_ticket_id != rec.id:
+            abort(404)
+        released = False
+        try:
+            from app.eyewitness.intake import maybe_release_for_request
+            released = maybe_release_for_request(row.id, manual=True)
+        except Exception:
+            pass
+        return jsonify({"request_id": row.id, "released": released})
+    return _view()
+
+
 @eyewitness_bp.route("/helpdesk/tickets/<int:ticket_id>/evidence/file/<int:capture_id>",
                      methods=["GET"])
 def tech_file(ticket_id, capture_id):
@@ -320,7 +436,9 @@ def tech_file(ticket_id, capture_id):
         req = db.session.get(EvidenceRequest, cap.request_id)
         if req is None or req.helpdesk_ticket_id != rec.id or not cap.file_path:
             abort(404)
-        return send_file(cap.file_path,
+        resp = send_file(cap.file_path,
                          mimetype=cap.mime or "application/octet-stream",
                          as_attachment=True)
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        return resp
     return _view()

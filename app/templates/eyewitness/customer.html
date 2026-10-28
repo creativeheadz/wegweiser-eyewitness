@@ -29,6 +29,14 @@
       <label class="ew-btn">Record voice note
         <input type="file" accept="audio/*" capture data-capture>
       </label>
+      {% elif item.kind == 'question' %}
+        {% for opt in item.options %}
+        <button type="button" class="ew-opt" data-answer-opt="{{ opt }}">{{ opt }}</button>
+        {% endfor %}
+        {% if item.free_text_max %}
+        <input type="text" maxlength="{{ item.free_text_max }}" data-answer-text placeholder="Your answer">
+        <button type="button" data-answer-save>Save answer</button>
+        {% endif %}
       {% endif %}
       <button type="button" class="ew-skip" data-skip>I can't do this</button>
       <p class="ew-status" data-status role="status"></p>
