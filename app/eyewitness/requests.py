@@ -68,6 +68,17 @@ def make_item(template: str, *, custom_text: str | None = None,
             "open_until": open_until}
 
 
+def make_question_item(template: str) -> dict:
+    """One quick question as a request item (kind question). The page
+    posts its answer through the token answer route; it needs no file."""
+    spec = QUESTIONS[template]
+    return {"id": f"q_{template}", "template": template,
+            "kind": "question", "title": spec["title"], "instruction": "",
+            "options": list(spec.get("options") or []),
+            "free_text_max": spec.get("free_text_max"),
+            "max_seconds": None, "custom": False, "open_until": None}
+
+
 def needs_approval(items: list[dict], *, existing_requests: int,
                    auto_send_templates: bool = True) -> bool:
     """Custom items and second requests always wait for a technician."""
@@ -86,7 +97,12 @@ def render_customer_text(items: list[dict], link: str, expires_at: int,
     lines = [f"Hello, this is {msp_name}. To progress your ticket, please "
              "provide the following.", ""]
     for n, item in enumerate(items):
-        lines.append(f"{LETTERS[n]}. {item['title']}. {item['instruction']}")
+        if item.get("kind") == "question":
+            opts = item.get("options") or []
+            suffix = f" ({', '.join(opts)})" if opts else ""
+            lines.append(f"{LETTERS[n]}. {item['title']}{suffix}")
+        else:
+            lines.append(f"{LETTERS[n]}. {item['title']}. {item['instruction']}")
     lines += ["", f"Open this link on your phone: {link}",
               f"The link works until {expiry}. You can skip anything you "
               "can't do. Thank you."]
