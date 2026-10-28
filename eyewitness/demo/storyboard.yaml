@@ -43,7 +43,7 @@ scenes:
     duration: 14
     visual: "phone/scene06.webm"
     voiceover: "voice/scene06.wav"
-    caption: "Step two: film the little light for ten seconds."
+    caption: "Then she films the little light for ten seconds."
     badge: "NEW"
   - number: 7
     start: "1:32"
