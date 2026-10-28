@@ -89,6 +89,7 @@ class EvidenceRequest(db.Model):
     submitted_at = db.Column(db.BigInteger, nullable=True)
     voice_offer = db.Column(db.String(16), nullable=False,
                             default=VOICE_NOT_SHOWN)
+    purged_at = db.Column(db.BigInteger, nullable=True)
 
     @property
     def is_open(self) -> bool:
@@ -118,6 +119,7 @@ class Capture(db.Model):
     prompt_version = db.Column(db.String(32), nullable=True)
     created_at = db.Column(db.BigInteger, nullable=False, default=_now)
     processed_at = db.Column(db.BigInteger, nullable=True)
+    purged_at = db.Column(db.BigInteger, nullable=True)
     error = db.Column(db.Text, nullable=True)
 
 

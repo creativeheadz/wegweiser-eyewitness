@@ -48,6 +48,18 @@
           }).catch(function () { msg.textContent = "Could not create the request."; });
         });
         bindActions(mount);
+        var guide = mount.querySelector("[data-ew-guide-form]");
+        if (guide) guide.addEventListener("submit", function (ev) {
+          ev.preventDefault();
+          var gmsg = mount.querySelector("[data-ew-guide-msg]");
+          fetch("/helpdesk/tickets/" + ticket + "/evidence/guide", {
+            method: "POST", body: new FormData(guide), credentials: "same-origin"
+          }).then(function (r) { return r.json(); }).then(function (body) {
+            if (body.error) { gmsg.textContent = body.error; return; }
+            gmsg.textContent = "Guide ready, waiting for approval.";
+            load();
+          }).catch(function () { gmsg.textContent = "Could not draw the guide."; });
+        });
       })
       .catch(function () { /* panel is additive; the ticket page stands alone */ });
   }

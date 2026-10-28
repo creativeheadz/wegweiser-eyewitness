@@ -17,16 +17,44 @@
     <li class="ew-item" data-item-id="{{ item.id }}" data-kind="{{ item.kind }}" data-max-seconds="{{ item.max_seconds or '' }}">
       <h2>{{ loop.index }}. {{ item.title }}</h2>
       <p>{{ item.instruction }}</p>
+      {% if guides.get(item.id) %}
+      <p><img class="ew-guide" src="{{ guides.get(item.id) }}" alt="Guide photo from your support team"></p>
+      {% endif %}
       {% if item.kind == 'photo' %}
-      <label class="ew-btn">Take photo
+      <div class="ew-live" data-live>
+        <video class="ew-preview" data-preview playsinline muted hidden></video>
+        <canvas data-canvas hidden></canvas>
+        <p>
+          <button type="button" class="ew-btn" data-start-camera>Open camera</button>
+          <button type="button" class="ew-btn" data-take-photo hidden>Take photo</button>
+        </p>
+      </div>
+      <label class="ew-btn ew-fallback">Use a photo file
         <input type="file" accept="image/*" capture="environment" data-capture>
       </label>
       {% elif item.kind == 'video' %}
-      <label class="ew-btn">Record video
+      <div class="ew-live" data-live>
+        <video class="ew-preview" data-preview playsinline muted hidden></video>
+        <p class="ew-count" data-countdown role="status"></p>
+        <p class="ew-timer" data-timer role="status"></p>
+        <p>
+          <button type="button" class="ew-btn" data-start-camera>Open camera</button>
+          <button type="button" class="ew-btn" data-record-video hidden>Record video</button>
+          <button type="button" class="ew-btn" data-stop-video hidden>Stop</button>
+        </p>
+      </div>
+      <label class="ew-btn ew-fallback">Use a video file
         <input type="file" accept="video/*" capture="environment" data-capture>
       </label>
       {% elif item.kind == 'voice' %}
-      <label class="ew-btn">Record voice note
+      <div class="ew-live" data-live>
+        <p class="ew-timer" data-timer role="status"></p>
+        <p>
+          <button type="button" class="ew-btn" data-record-voice>Record voice note</button>
+          <button type="button" class="ew-btn" data-stop-voice hidden>Stop</button>
+        </p>
+      </div>
+      <label class="ew-btn ew-fallback">Use an audio file
         <input type="file" accept="audio/*" capture data-capture>
       </label>
       {% elif item.kind == 'question' %}

@@ -66,7 +66,16 @@ def customer_page(token):
     from app.models import Tenants
     tenant = db.session.get(Tenants, row.tenant_uuid)
     msp_name = getattr(tenant, "tenantname", None) or "Your IT support"
+    # Guide photos (S2) ride on their item as a token-scoped file URL.
+    guides = {}
+    for item in (row.items or []):
+        guide_id = item.get("guide_capture_id")
+        if guide_id:
+            guides[item.get("id")] = url_for(
+                "eyewitness_bp.own_file", token=token,
+                capture_id=int(guide_id))
     return render_template("eyewitness/customer.html", row=row,
+                           guides=guides,
                            msp_name=msp_name, token=token)
 
 
@@ -217,6 +226,50 @@ def done(token):
     return jsonify({"done": True, "stays_open": has_next_time})
 
 
+@eyewitness_bp.route("/get-help/<token>/evidence", methods=["GET"])
+@limiter.limit("120 per hour")
+def help_evidence(token):
+    """The Eyewitness link for one help ticket, and nothing else (S1).
+
+    The help token is the authority, as on the help form. A help
+    ticket's request is created in Celery after the send, so the
+    sent page polls this endpoint until the link exists. Only a
+    request open for the customer is handed out; one that waits for
+    a technician stays with the technician.
+    """
+    from app.models.helpdesk import HelpRequest
+    digest = hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+    req = HelpRequest.query.filter_by(token_hash=digest).first()
+    if req is None or req.status != "submitted" or not req.ticket_id:
+        return jsonify({"ready": False}), 404
+    from app.eyewitness.models import EvidenceRequest
+    from app.models.helpdesk import HelpdeskTicket
+    record = HelpdeskTicket.query.filter_by(
+        tenant_uuid=req.tenant_uuid, provider=req.ticket_provider,
+        external_id=str(req.ticket_id)).first()
+    if record is None:
+        return jsonify({"ready": False})
+    row = (EvidenceRequest.query.filter_by(
+        helpdesk_ticket_id=record.id, status="open")
+        .order_by(EvidenceRequest.created_at.desc()).first())
+    if row is None:
+        return jsonify({"ready": False})
+    from app.utilities.absolute_url import absolute_url
+    link = absolute_url(url_for("eyewitness_bp.customer_page",
+                                token=row.token))
+    qr_data = None
+    try:
+        import base64
+        import qrcode as qr_lib
+        buf = io.BytesIO()
+        qr_lib.make(link).save(buf, format="PNG")
+        qr_data = ("data:image/png;base64,"
+                   + base64.b64encode(buf.getvalue()).decode())
+    except Exception:
+        qr_data = None
+    return jsonify({"ready": True, "link": link, "qr": qr_data})
+
+
 @eyewitness_bp.route("/eyewitness/<token>/file/<int:capture_id>", methods=["GET"])
 def own_file(token, capture_id):
     from app.eyewitness.models import Capture
@@ -247,29 +300,36 @@ def panel(ticket_id):
 
     @login_required
     def _view():
-        from app.eyewitness.models import EvidenceRequest, MetaCall
+        from app.eyewitness.intake import ticket_meta_usd
+        from app.eyewitness.models import EvidenceRequest
         rec = _ticket_or_404(ticket_id)
         reqs = (EvidenceRequest.query.filter_by(helpdesk_ticket_id=rec.id)
                 .order_by(EvidenceRequest.created_at.desc()).all())
+        cost = ticket_meta_usd(reqs)
         from app.eyewitness.models import Capture
         req_ids = [r.id for r in reqs] or [-1]
-        cost = float(db.session.query(db.func.coalesce(db.func.sum(MetaCall.usd), 0))
-                     .join(Capture, Capture.id == MetaCall.capture_id)
-                     .filter(Capture.request_id.in_(req_ids)).scalar() or 0)
-        base = (request.url_root or "").rstrip("/")
+        caps = (Capture.query.filter(Capture.request_id.in_(req_ids),
+                                     Capture.kind == "photo")
+                .order_by(Capture.created_at.desc()).all())
+        from app.utilities.absolute_url import absolute_url
+        links = {}
         qr = {}
         try:
             import base64
             import qrcode as qr_lib
             for r in reqs:
+                link = absolute_url(url_for(
+                    "eyewitness_bp.customer_page", token=r.token))
+                links[r.token] = link
                 buf = io.BytesIO()
-                qr_lib.make(f"{base}/eyewitness/{r.token}").save(buf, format="PNG")
+                qr_lib.make(link).save(buf, format="PNG")
                 qr[r.token] = ("data:image/png;base64,"
                                + base64.b64encode(buf.getvalue()).decode())
         except Exception:
             qr = {}
         return render_template("eyewitness/panel.html", rec=rec, reqs=reqs,
-                               meta_usd=cost, base=base, qr=qr)
+                               caps=caps,
+                               meta_usd=cost, links=links, qr=qr)
     return _view()
 
 
@@ -420,6 +480,95 @@ def release_now(ticket_id, req_id):
         except Exception:
             pass
         return jsonify({"request_id": row.id, "released": released})
+    return _view()
+
+
+@eyewitness_bp.route(
+    "/helpdesk/tickets/<int:ticket_id>/evidence/guide",
+    methods=["POST"])
+def make_guide_request(ticket_id):
+    """Draw a guide on an earlier photo (S2, technician only).
+
+    The new request always waits for approval, under the second
+    request rule, however many requests the ticket already holds.
+    Nothing here runs from the intake agent.
+    """
+    from app.utilities.app_access_login_required import login_required
+
+    @login_required
+    def _view():
+        from app.eyewitness import requests as ew_requests
+        from app.eyewitness.models import (REQ_NEEDS_APPROVAL, Capture,
+                                           EvidenceRequest)
+        from app.eyewitness.security import outgoing_filter
+        rec = _ticket_or_404(ticket_id)
+        try:
+            source_id = int(request.form.get("capture_id") or 0)
+        except ValueError:
+            return jsonify({"error": "choose a photo"}), 400
+        source = db.session.get(Capture, source_id)
+        if source is None or not source.file_path:
+            return jsonify({"error": "choose a photo"}), 400
+        source_req = db.session.get(EvidenceRequest,
+                                    source.request_id)
+        if source_req is None \
+                or source_req.helpdesk_ticket_id != rec.id:
+            abort(404)
+        with open(source.file_path, "rb") as fh:
+            photo = fh.read()
+        style = request.form.get("style") or "circle"
+        client = None
+        try:
+            from app.eyewitness.meta.client import db_bound_client
+            client = db_bound_client()
+        except Exception:
+            client = None
+        from app.eyewitness.readers.guide import make_guide
+        made = make_guide(photo, style, client=client,
+                          capture_id=source.id)
+        name = f"{uuid_mod.uuid4().hex}.bin"
+        path = os.path.join(storage_dir(), name)
+        with open(path, "wb") as fh:
+            fh.write(made["bytes"])
+        token = ew_requests.new_token()
+        from app.utilities.absolute_url import absolute_url
+        link = absolute_url(url_for("eyewitness_bp.customer_page",
+                                    token=token))
+        expires = int(time.time()) + ew_requests.link_ttl_seconds()
+        items = [{"id": "guide_photo", "template": "custom",
+                  "kind": "photo", "title": "Take this photo again",
+                  "instruction": "Your support team marked one of "
+                                 "your photos. Take a new photo of "
+                                 "the marked part.",
+                  "max_seconds": None, "custom": True,
+                  "open_until": None, "guide_capture_id": None}]
+        text = ew_requests.render_customer_text(items, link, expires)
+        hits = outgoing_filter(text, allowed_url=link)
+        row = EvidenceRequest(
+            tenant_uuid=rec.tenant_uuid, helpdesk_ticket_id=rec.id,
+            token=token, items=items, customer_text=text,
+            reason_for_technician="Guide photo drawn by a "
+                                  "technician",
+            language="en", status=REQ_NEEDS_APPROVAL,
+            filter_hits=hits or None, expires_at=expires)
+        db.session.add(row)
+        db.session.flush()
+        guide = Capture(
+            request_id=row.id, item_id="guide", kind="photo",
+            file_path=path, mime="image/jpeg",
+            size=len(made["bytes"]),
+            sha256=hashlib.sha256(made["bytes"]).hexdigest(),
+            status="ok",
+            reading={"summary": "guide photo",
+                     "method": made["method"], "style": style})
+        db.session.add(guide)
+        db.session.flush()
+        items[0]["guide_capture_id"] = guide.id
+        row.items = items
+        db.session.commit()
+        return jsonify({"request_id": row.id, "status": row.status,
+                        "guide_capture_id": guide.id,
+                        "method": made["method"]}), 201
     return _view()
 
 
