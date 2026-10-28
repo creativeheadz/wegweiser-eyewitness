@@ -20,11 +20,14 @@ Data: `eyewitness_intake_runs`, `eyewitness_requests`,
 `app/static`.
 
 Readers (Phase 3). Video: ffmpeg transcodes every upload to H.264
-MP4 at 10 fps with faststart, SAM 3.1 locates the light with at most
-three concepts, and code measures the fixed region on every frame
-with hysteresis, groups the flashes and decodes them with
-`decode/dell_led.json`. Where SAM finds nothing the locator is code
-too, and the reading names it. Three keyframes go to Spark in one
+MP4 at 10 fps with faststart, keeping at most 20 seconds. SAM 3.1
+gets one concept prompt. Where that finds nothing, code finds the
+candidate that changes once the frames are lined up, and SAM follows
+it from a point prompt on the frame where it is brightest. Code then
+measures the region on every frame with hysteresis, groups the
+flashes and decodes them with `decode/dell_led.json`. Where SAM
+follows nothing the region stays the code's, and the reading names
+the locator. Three keyframes go to Spark in one
 call for what visibly happens. Beeps come from the audio track by
 an energy envelope and `decode/beep_codes.json` (S3, no model).
 Voice: ffmpeg makes 16 kHz mono WAV with a 60 second cap, one batch

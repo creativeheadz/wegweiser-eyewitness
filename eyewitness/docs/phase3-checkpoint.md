@@ -147,6 +147,37 @@ the staging run below.
    `test_eventlog_upload.py`, `test_integration_hardening.py`,
    `test_score_breakdown.py`, `test_security_report_pdf.py`).
 
+## Review (Claude Code, 2026-10-28)
+
+The review fixed these before the push.
+
+- **Video reads had no length bound.** The 20 second maximum was
+  defined and never applied, so a long file upload was transcoded in
+  full and held in memory frame by frame. SAM billed every one of
+  those frames. The normalised clip now stops at 20 seconds.
+- **Media calls could reach the network.** Every ffmpeg and ffprobe
+  call now runs with `-protocol_whitelist file`, and a test walks the
+  readers for it.
+- **Evidence stayed in temporary folders.** The video, voice and beep
+  readers now remove their work folders when a read ends.
+- **The help form's photo link outlived the help token.** It now ends
+  with the token.
+- **The code locator could settle on a vent mesh.** Staging's decode
+  of the synthetic clip moved the winner from the light to the mesh
+  under hand shake. Frames are now lined up by phase correlation and
+  cells are scored on their mean brightness. A light scores 17 and a
+  shaken scene with no light scores under 4.
+- **SAM concept prompts were not repeatable on this clip.** The same
+  concept found the light on one call and nothing on three others. The
+  reader now sends one concept, and otherwise asks SAM to follow the
+  code's candidate from a point prompt, which tracked the light on 48
+  frames. When a concept region holds no blinks, the reader tries the
+  candidate before it gives up.
+- **The end-to-end script** used a wrong column in the help scenario
+  and widened the tenant's help settings. Its cost step also failed
+  when every call came from the cache. These are fixed, and the help
+  scenario takes `--device`.
+
 ## Gaps carried forward
 
 - The guide edit call and the SAM file upload path have no live

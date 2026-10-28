@@ -298,3 +298,51 @@ def test_fallback_locator_ignores_shake_and_finds_the_light():
     assert found["x1"] <= 106 <= found["x2"]
     assert found["y1"] <= 66 <= found["y2"]
     assert video.locate_by_motion(_shaken_scene(blink=False)) is None
+
+
+class _FakeSam:
+    """Answers point prompts with a tracked light; concepts with nothing."""
+    is_configured = True
+
+    def __init__(self, track: bool = True):
+        self.track = track
+        self.prompts = []
+
+    def sam_segment(self, *, concept, media_part, capture_id=None,
+                    intake_run_id=None, frame_count=0):
+        self.prompts.append(concept)
+        if self.track and concept.startswith("<"):
+            return ("<10f>1<|box;x1=328;y1=150;x2=340;y2=164;w=768;h=768|>"
+                    "<|mask;x=0;y=0;data=14,12,!abc|>\n"
+                    "<11f>1<|box;x1=329;y1=151;x2=341;y2=165;w=768;h=768|>"
+                    "<|mask;x=0;y=0;data=14,12,!abc|>\n")
+        return ""
+
+
+def _frames_with_light(lit_frame: int = 7):
+    frames = [np.full((768, 768, 3), 40, dtype=np.uint8) for _ in range(12)]
+    frames[lit_frame][150:165, 328:341] = 250
+    return frames
+
+
+def test_point_prompt_sits_on_the_candidate_where_it_is_brightest():
+    prompt = video.point_prompt(_frames_with_light(7),
+                                {"x1": 309, "y1": 127, "x2": 353, "y2": 185})
+    assert prompt == "<7f>1<|point;x=331;y=156;w=768;h=768|>"
+
+
+def test_sam_follows_the_code_candidate_from_a_point():
+    frames = _frames_with_light()
+    code_region = {"x1": 309, "y1": 127, "x2": 353, "y2": 185,
+                   "w": 768, "h": 768}
+    sam = _FakeSam()
+    region, prompt, found = video.follow_candidate(
+        frames, code_region, client=sam, media_part={"type": "input_video"},
+        frame_count=120)
+    assert prompt.startswith("<7f>1<|point;")
+    assert sorted(found) == [10, 11]
+    assert region["x1"] <= 328 and region["x2"] >= 341
+    assert region["x2"] - region["x1"] < code_region["x2"] - code_region["x1"]
+    assert video.follow_candidate(
+        frames, code_region, client=_FakeSam(track=False),
+        media_part={"type": "input_video"}, frame_count=120) is None

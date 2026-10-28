@@ -219,8 +219,13 @@ class Stage:
             (MetaCall.intake_run_id == run.id)
             | (MetaCall.capture_id.in_(cap_ids or [-1]))).all()
         total = sum(float(c.usd or 0) for c in calls)
-        return step("cost rows logged", bool(calls) and total > 0,
-                    f"calls={len(calls)} usd={total:.4f}")
+        cached = sum(1 for c in calls if c.cache_hit)
+        # A repeat run can be served wholly from the cache at $0; that
+        # still logs a row per call, which is what this step checks.
+        priced = total > 0 or (calls and cached == len(calls))
+        return step("cost rows logged", bool(calls) and bool(priced),
+                    f"calls={len(calls)} cached={cached} "
+                    f"usd={total:.4f}")
 
     def close_ticket(self):
         try:
@@ -499,24 +504,19 @@ def scenario_help(stage: Stage) -> None:
     that stays open, then a follow-up capture after release."""
     args = stage.args
     from app.models import Devices
-    device = (Devices.query.filter_by(tenant_uuid=stage.tenant_uuid)
-              .order_by(Devices.devicename).first())
+    device = (Devices.query.filter_by(tenantuuid=stage.tenant_uuid,
+                                      devicename=args.device).first())
     if not step("managed device found for the tenant",
-                device is not None,
-                f"device={getattr(device, 'devicename', None)}"):
+                device is not None, f"device={args.device}"):
         return
-    from app.models.helpdesk import HelpdeskSettings
-    hs = stage.db.session.get(HelpdeskSettings, stage.tenant_uuid)
-    if hs is None:
-        hs = HelpdeskSettings(tenant_uuid=stage.tenant_uuid,
-                              help_enabled=True)
-        stage.db.session.add(hs)
-    else:
-        hs.help_enabled = True
-        hs.help_orgs = None
-    stage.db.session.commit()
-    from app.utilities.help_intake import (issue_link,
+    # The scenario uses the help settings as they stand. It never
+    # widens them, so a device without help fails here instead.
+    from app.utilities.help_intake import (help_enabled_for, issue_link,
                                            request_for_token, submit)
+    if not step("help button enabled for the device",
+                bool(help_enabled_for(device)),
+                "switch help on for the device's organisation first"):
+        return
     try:
         help_req, url = issue_link(
             device, account=BRENDA_NAME, upn=BRENDA_EMAIL,
@@ -666,6 +666,8 @@ def main() -> int:
     parser.add_argument("--injection-image", default="",
                         help="path to the sticky note photo "
                              "(injection scenario)")
+    parser.add_argument("--device", default="RECEPTION-PC",
+                        help="the managed device for the help scenario")
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
     if args.scenario in ("email", "help") and not args.golden:

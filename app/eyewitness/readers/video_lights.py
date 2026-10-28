@@ -20,7 +20,10 @@ _DELL = None
 
 PROMPT_VERSION = "video_describe_v1"
 
-CONCEPTS = ("power button light", "indicator light", "power button")
+# One concept prompt. On the synthetic clips no concept found the light
+# reliably, while a point prompt on the code-found candidate tracked it
+# on every lit frame (28 Oct), so the point prompt does the following.
+CONCEPTS = ("power button light",)
 
 MIN_DURATION_S = 3.0
 MAX_DURATION_S = 20.0
@@ -237,6 +240,70 @@ def measure_region_series(frames, box: dict) -> list[dict]:
                        if top.size else 0.0,
                        "colour": colour})
     return series
+
+
+def point_prompt(frames, region: dict) -> str:
+    """A SAM point prompt on a code-found candidate: its centre, on the
+    frame where the candidate is brightest. Coordinates stay inside the
+    frame and w/h are the frame's own, as SAM requires."""
+    import numpy as np
+    x1, y1, x2, y2 = (int(region[k]) for k in ("x1", "y1", "x2", "y2"))
+    levels = [float(np.asarray(f)[y1:y2, x1:x2].mean()) for f in frames]
+    n = int(np.argmax(levels)) if levels else 0
+    h, w = np.asarray(frames[0]).shape[:2]
+    cx = min(max((x1 + x2) // 2, 0), w - 1)
+    cy = min(max((y1 + y2) // 2, 0), h - 1)
+    return f"<{n}f>1<|point;x={cx};y={cy};w={w};h={h}|>"
+
+
+def _sam_found(client, text: str, media_part: dict, frame_count: int,
+               capture_id=None, intake_run_id=None) -> dict:
+    """SAM frames for one prompt, or {} when the call or the parse fails."""
+    from app.eyewitness.meta.sam_parser import parse_sam_video
+    try:
+        raw = client.sam_segment(concept=text, media_part=media_part,
+                                 capture_id=capture_id,
+                                 intake_run_id=intake_run_id,
+                                 frame_count=frame_count)
+        return parse_sam_video(raw) or {}
+    except Exception:
+        return {}
+
+
+def follow_candidate(frames, code_region: dict, *, client, media_part,
+                     frame_count: int, capture_id=None,
+                     intake_run_id=None):
+    """SAM follows the code-found candidate from a point prompt.
+
+    Returns (region, prompt, sam_frames) with the region expanded
+    around SAM's boxes, or None when SAM tracks nothing there.
+    """
+    from app.eyewitness.meta.sam_parser import union_box
+    prompt = point_prompt(frames, code_region)
+    found = _sam_found(client, prompt, media_part, frame_count,
+                       capture_id, intake_run_id)
+    box = union_box(found)
+    if box is None:
+        return None
+    h, w = frames[0].shape[:2]
+    return _expand(_scale_box(box, w, h), w, h), prompt, found
+
+
+def _sam_media_part(client, norm_path: str, capture_id=None,
+                    intake_run_id=None) -> dict:
+    """The normalised clip as one input_video part, built once per read:
+    inline up to 6 MB, otherwise one upload to the files endpoint."""
+    with open(norm_path, "rb") as fh:
+        norm_bytes = fh.read()
+    if len(norm_bytes) <= 6 * 1024 * 1024:
+        import base64
+        return {"type": "input_video",
+                "video_url": "data:video/mp4;base64,"
+                + base64.b64encode(norm_bytes).decode()}
+    return {"type": "input_video",
+            "file_id": client.upload_file(norm_bytes, "clip.mp4",
+                                          capture_id=capture_id,
+                                          intake_run_id=intake_run_id)}
 
 
 def _stabilise(stack):
@@ -486,9 +553,10 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
                 intake_run_id=None) -> dict:
     """One power light clip, read inside `work`.
 
-    Normalise with ffmpeg, locate the light with SAM (three concepts
-    at most) or with the code fallback, count in code on every frame,
-    then decode with the Dell table. Beeps from the audio track join
+    Normalise with ffmpeg, then locate the light: one SAM concept
+    prompt, or a code-found candidate that SAM follows from a point
+    prompt, or code alone. Count in code on every frame, then decode
+    with the Dell table. Beeps from the audio track join
     the reading when the clip carries them (S3).
     """
     if not data:
@@ -531,37 +599,26 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
                        {"duration_s": norm_probe["duration_s"],
                         "stats": stats,
                         "prompt_version": PROMPT_VERSION})
-    # Locate: SAM first (at most three concepts), then code.
+    # Locate. One SAM concept prompt first. Where it finds nothing, code
+    # finds the candidate and SAM follows it from a point prompt. Code
+    # alone is the last step. The counting is always code.
     region = None
     locator = None
     concept_used = None
     sam_frames: dict = {}
+    frame_count = int(round(norm_probe["duration_s"] * 10))
+    media_part = None
     if live_client is not None:
-        from app.eyewitness.meta.sam_parser import (parse_sam_video,
-                                                    union_box)
-        with open(norm, "rb") as fh:
-            norm_bytes = fh.read()
-        frame_count = int(round(norm_probe["duration_s"] * 10))
+        try:
+            media_part = _sam_media_part(live_client, norm, capture_id,
+                                         intake_run_id)
+        except Exception:
+            media_part = None
+    if media_part is not None:
+        from app.eyewitness.meta.sam_parser import union_box
         for concept in CONCEPTS:
-            try:
-                if len(norm_bytes) <= 6 * 1024 * 1024:
-                    import base64
-                    part = {"type": "input_video",
-                            "video_url": "data:video/mp4;base64,"
-                            + base64.b64encode(norm_bytes).decode()}
-                else:
-                    part = {"type": "input_video",
-                            "file_id": live_client.upload_file(
-                                norm_bytes, "clip.mp4",
-                                capture_id=capture_id,
-                                intake_run_id=intake_run_id)}
-                raw_text = live_client.sam_segment(
-                    concept=concept, media_part=part,
-                    capture_id=capture_id, intake_run_id=intake_run_id,
-                    frame_count=frame_count)
-            except Exception:
-                continue
-            found = parse_sam_video(raw_text)
+            found = _sam_found(live_client, concept, media_part,
+                               frame_count, capture_id, intake_run_id)
             box = union_box(found)
             if box is None:
                 continue
@@ -570,24 +627,47 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
                              frame_w, frame_h)
             locator, concept_used = "sam", concept
             break
-    if region is None:
+    def code_then_point():
+        """Code finds the candidate; SAM follows it when it can."""
         import cv2
         greys = [cv2.resize(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY),
                             (320, 240)) for f in frames[::2]]
         found = locate_by_motion(greys)
         if found is None:
+            return None
+        kx, ky = frame_w / 320.0, frame_h / 240.0
+        code_region = _expand(
+            {"x1": int(found["x1"] * kx), "y1": int(found["y1"] * ky),
+             "x2": int(found["x2"] * kx), "y2": int(found["y2"] * ky),
+             "w": frame_w, "h": frame_h}, frame_w, frame_h)
+        if media_part is not None:
+            followed = follow_candidate(
+                frames, code_region, client=live_client,
+                media_part=media_part, frame_count=frame_count,
+                capture_id=capture_id, intake_run_id=intake_run_id)
+            if followed is not None:
+                followed_region, prompt, followed_frames = followed
+                return followed_region, "sam_point", prompt, followed_frames
+        return code_region, "code", None, {}
+
+    if region is None:
+        located = code_then_point()
+        if located is None:
             return _retake("light_not_found",
                            {"duration_s": norm_probe["duration_s"],
                             "stats": stats, "locator": "code",
                             "prompt_version": PROMPT_VERSION})
-        kx, ky = frame_w / 320.0, frame_h / 240.0
-        region = _expand(
-            {"x1": int(found["x1"] * kx), "y1": int(found["y1"] * ky),
-             "x2": int(found["x2"] * kx), "y2": int(found["y2"] * ky),
-             "w": frame_w, "h": frame_h}, frame_w, frame_h)
-        locator = "code"
+        region, locator, concept_used, sam_frames = located
     series = measure_region_series(frames, region)
     events = flashes_from_series(series, fps)
+    if len(events) < 2 and locator == "sam":
+        # A concept can land on the button beside the light. Try the
+        # candidate that changes before giving up.
+        located = code_then_point()
+        if located is not None:
+            region, locator, concept_used, sam_frames = located
+            series = measure_region_series(frames, region)
+            events = flashes_from_series(series, fps)
     if len(events) < 2:
         return _retake("light_not_found",
                        {"duration_s": norm_probe["duration_s"],
