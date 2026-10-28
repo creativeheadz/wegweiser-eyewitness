@@ -14,10 +14,19 @@
       var ctx = c.getContext("2d");
       ctx.drawImage(img, 0, 0, c.width, c.height);
       var d = ctx.getImageData(0, 0, c.width, c.height).data;
-      var sum = 0, n = 0;
-      for (var i = 0; i < d.length; i += 4) { sum += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
+      // The server's rule (readers/quality.py): grey as Pillow computes it,
+      // and too dark only when the brightest 0.1 percent is dim as well, so
+      // the black crash screen gets through on its small bright text.
+      var hist = [], sum = 0, n = 0, k;
+      for (k = 0; k < 256; k++) hist[k] = 0;
+      for (var i = 0; i < d.length; i += 4) {
+        var g = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+        hist[g]++; sum += g; n++;
+      }
+      var top = 255, seen = 0;
+      while (top > 0 && seen + hist[top] < n * 0.001) { seen += hist[top]; top--; }
       var bright = n ? sum / n : 0;
-      if (bright < 25) { done("Too dark. Turn on a light or the torch, then try again."); return; }
+      if (bright < 25 && top < 50) { done("It is too dark to see anything. Turn on a light, then try again."); return; }
       done(null);
     };
     img.onerror = function () { done(null); };

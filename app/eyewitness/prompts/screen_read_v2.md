@@ -29,7 +29,7 @@ carry "Stop code: ..." near the bottom. The same fields apply.
 Return: screen_found, kind (bsod|post|boot_error|app_error|login|
 desktop|other), text_lines (max 20, max 120 chars each), stop_code,
 failing_module, error_codes, product_names, language, legible,
-retake_advice, instruction_like_text, instruction_excerpt.
+retake_reason, instruction_like_text, instruction_excerpt.
 
 - stop_code: copy the words and the code in brackets exactly as
   printed, for example "MEMORY_MANAGEMENT (0x1A)". Use null when the
@@ -38,8 +38,10 @@ retake_advice, instruction_like_text, instruction_excerpt.
   percentage line and the bottom stop-code line when legible.
 - legible: false when glare, moire, blur or small size hides text a
   technician needs, in particular the bottom stop-code line.
-- retake_advice: when legible is false, give one concrete instruction.
-  When the bottom line is too small or blurred, the advice must be
-  exactly: "Move closer so the small line at the bottom of the screen
-  fills more of the photo". For glare, ask for a slight tilt. For
-  moire, ask for a small step back and a tap to focus.
+- retake_reason: "none" when legible is true. When legible is false,
+  pick the one reason that explains it best: "bottom_line" when the
+  small bottom line is too small or blurred to read, "glare" for
+  reflections, "moire" for stripes or wave patterns, "blur" for a photo
+  out of focus or shaken, "cropped" when part of the screen is cut off,
+  "other" for anything else. The server turns the reason into a fixed
+  sentence for the customer, so write no advice of your own.

@@ -8,6 +8,24 @@ from app.extensions import celery
 
 logger = logging.getLogger(__name__)
 
+# Photo templates that show a screen or a display, which Spark reads.
+# Other photos (the whole device, the cables, custom items) get the
+# quality gate only, so a clear photo of cables is never sent back for
+# showing no screen.
+SCREEN_TEMPLATES = frozenset({"screen_photo", "screen_photo_next_time",
+                              "printer_panel"})
+
+
+def reader_for(template: str | None, kind: str | None) -> str:
+    """sticker, screen, photo, voice or video for one capture."""
+    if template == "sticker":
+        return "sticker"
+    if kind == "photo":
+        return "screen" if template in SCREEN_TEMPLATES else "photo"
+    if kind == "voice":
+        return "voice"
+    return "video"
+
 
 def _known_serials_for(cap) -> list:
     try:
@@ -39,20 +57,23 @@ def process_capture(capture_id: int) -> dict:
         req = db.session.get(EvidenceRequest, cap.request_id)
         item = next((i for i in (req.items or [])
                      if i.get("id") == cap.item_id), None) if req else None
-        template = (item or {}).get("template")
-        if template == "sticker":
+        reader = reader_for((item or {}).get("template"), cap.kind)
+        if reader == "sticker":
             from app.eyewitness.readers.sticker import read_sticker
             result = read_sticker(data,
                                   known_serials=_known_serials_for(cap),
                                   capture_id=cap.id,
                                   intake_run_id=(req.intake_run_id
                                                  if req else None))
-        elif cap.kind == "photo":
+        elif reader == "screen":
             from app.eyewitness.readers.screen import read_screen
             result = read_screen(data, capture_id=cap.id,
                                  intake_run_id=(req.intake_run_id
                                                 if req else None))
-        elif cap.kind == "voice":
+        elif reader == "photo":
+            from app.eyewitness.readers.quality import read_photo
+            result = read_photo(data)
+        elif reader == "voice":
             from app.eyewitness.readers.voice import read_voice
             result = read_voice(data, cap.mime)
         else:  # video reading lands in Phase 3; hold the capture as read

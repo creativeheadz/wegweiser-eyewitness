@@ -3,6 +3,8 @@
 Serial normalisation and matching are pure and tested. Placeholder
 serials never match. A confirmed mismatch returns a retake, because a
 photo of a different machine would send the work to the wrong device.
+As with screens, Spark picks a retake reason from a fixed list and the
+customer reads only the fixed sentence for it (brief 7.8).
 """
 from __future__ import annotations
 
@@ -11,7 +13,20 @@ import re
 
 from .quality import assess_image
 
-PROMPT_VERSION = "sticker_read_v1"
+PROMPT_VERSION = "sticker_read_v2"
+
+RETAKE_ADVICE = {
+    "glare": "There is glare on the label. Tilt the phone slightly and "
+             "try again.",
+    "blur": "The label is out of focus. Tap the label on your phone "
+            "screen to focus, then try again.",
+    "too_far": "The label is too small in the photo. Move closer so it "
+               "fills most of the photo.",
+    "cropped": "Part of the label is cut off. Step back a little so the "
+               "whole label fits in the photo.",
+    "other": "The label cannot be read. Move closer and keep the whole "
+             "label in the photo.",
+}
 
 _PLACEHOLDERS = {"", "none", "unknown", "n/a", "na", "tbd",
                  "serialnumber", "systemserialnumber", "0123456789",
@@ -28,12 +43,13 @@ STICKER_SCHEMA = {
         "text_lines": {"type": "array", "items": {"type": "string"}},
         "language": {"type": ["string", "null"]},
         "legible": {"type": "boolean"},
-        "retake_advice": {"type": ["string", "null"]},
+        "retake_reason": {"type": "string",
+                          "enum": ["none", *RETAKE_ADVICE]},
         "instruction_like_text": {"type": "boolean"},
         "instruction_excerpt": {"type": ["string", "null"]},
     },
     "required": ["manufacturer", "model", "serial_text", "service_tag",
-                 "text_lines", "language", "legible", "retake_advice",
+                 "text_lines", "language", "legible", "retake_reason",
                  "instruction_like_text", "instruction_excerpt"],
     "additionalProperties": False,
 }
@@ -64,7 +80,7 @@ def serial_match(read_value, known_values) -> str:
 
 def _load_prompt() -> str:
     path = os.path.join(os.path.dirname(__file__), "..", "prompts",
-                        "sticker_read_v1.md")
+                        "sticker_read_v2.md")
     with open(path, encoding="utf-8") as fh:
         return fh.read()
 
@@ -115,11 +131,13 @@ def _verdict_from_reading(raw: dict, codes: list[str], quality: dict,
         reading["support_link"] = link
     injection = bool(raw.get("instruction_like_text"))
     if not reading["legible"]:
-        advice = (raw.get("retake_advice")
-                  or "The label cannot be read. Move closer, tap to "
-                     "focus, and keep the whole label in the photo.")
+        reason = raw.get("retake_reason")
+        if reason not in RETAKE_ADVICE:
+            reason = "other"
+        reading["retake_reason"] = reason
         return {"verdict": "retake",
-                "retake": {"reason": "illegible", "advice": advice[:300]},
+                "retake": {"reason": "illegible",
+                           "advice": RETAKE_ADVICE[reason]},
                 "reading": reading, "injection_flag": injection}
     if match == "mismatch":
         return {"verdict": "retake",

@@ -7,6 +7,10 @@ screens still parse under the same fields.
 
 Flow: quality gate (no model call on failure), zxing QR and barcode
 decode, then one Spark structured read. Text in the image is data.
+
+No model text reaches the customer (brief 7.8). When a photo cannot be
+read, Spark picks a reason from a fixed list and the customer sees the
+fixed sentence for that reason.
 """
 from __future__ import annotations
 
@@ -17,6 +21,27 @@ import os
 from .quality import assess_image
 
 PROMPT_VERSION = "screen_read_v2"
+
+# The advice for the one failure the new layout invites: the stop code
+# is small text at the bottom and a photo taken too far away loses it.
+BOTTOM_LINE_ADVICE = ("Move closer so the small line at the bottom of "
+                      "the screen fills more of the photo.")
+
+RETAKE_ADVICE = {
+    "bottom_line": BOTTOM_LINE_ADVICE,
+    "glare": "There is glare on the screen. Tilt the phone slightly and "
+             "try again.",
+    "moire": "Stripes are hiding the text. Step back a little and tap "
+             "your phone screen to focus.",
+    "blur": "The photo is out of focus. Hold the phone 30 cm away and "
+            "tap your phone screen to focus.",
+    "cropped": "Part of the screen is cut off. Step back so the whole "
+               "screen fits in the photo.",
+    "other": "The text cannot be read. Hold the phone 30 cm away and tap "
+             "your phone screen to focus.",
+}
+NO_SCREEN_ADVICE = ("No screen could be read in the photo. Fill the "
+                    "photo with the screen and try again.")
 
 SCREEN_SCHEMA = {
     "type": "object",
@@ -32,21 +57,17 @@ SCREEN_SCHEMA = {
         "product_names": {"type": "array", "items": {"type": "string"}},
         "language": {"type": ["string", "null"]},
         "legible": {"type": "boolean"},
-        "retake_advice": {"type": ["string", "null"]},
+        "retake_reason": {"type": "string",
+                          "enum": ["none", *RETAKE_ADVICE]},
         "instruction_like_text": {"type": "boolean"},
         "instruction_excerpt": {"type": ["string", "null"]},
     },
     "required": ["screen_found", "kind", "text_lines", "stop_code",
                  "failing_module", "error_codes", "product_names",
-                 "language", "legible", "retake_advice",
+                 "language", "legible", "retake_reason",
                  "instruction_like_text", "instruction_excerpt"],
     "additionalProperties": False,
 }
-
-# The advice for the one failure the new layout invites: the stop code
-# is small text at the bottom and a photo taken too far away loses it.
-BOTTOM_LINE_ADVICE = ("Move closer so the small line at the bottom of "
-                      "the screen fills more of the photo")
 
 
 def _load_prompt() -> str:
@@ -119,21 +140,20 @@ def _verdict_from_reading(raw: dict, codes: list[str],
     }
     injection = bool(raw.get("instruction_like_text"))
     if not reading["screen_found"]:
-        advice = (raw.get("retake_advice")
-                  or "No screen could be read in the photo. Fill the "
-                     "photo with the screen and try again.")
         return {"verdict": "retake",
-                "retake": {"reason": "no_screen", "advice": advice[:300]},
+                "retake": {"reason": "no_screen",
+                           "advice": NO_SCREEN_ADVICE},
                 "reading": reading, "injection_flag": injection}
     if not legible:
-        advice = raw.get("retake_advice") or ""
+        reason = raw.get("retake_reason")
+        if reason not in RETAKE_ADVICE:
+            reason = "other"
         if kind == "bsod" and not stop_code:
-            advice = BOTTOM_LINE_ADVICE
-        if not advice:
-            advice = ("The text cannot be read. Hold the phone 30 cm "
-                      "away and tap the screen to focus.")
+            reason = "bottom_line"
+        reading["retake_reason"] = reason
         return {"verdict": "retake",
-                "retake": {"reason": "illegible", "advice": advice[:300]},
+                "retake": {"reason": "illegible",
+                           "advice": RETAKE_ADVICE[reason]},
                 "reading": reading, "injection_flag": injection}
     label = {"bsod": "stop screen", "post": "startup screen",
              "boot_error": "boot error", "app_error": "app error",
@@ -153,11 +173,9 @@ def read_screen(data: bytes, *, client=None, capture_id=None,
                 intake_run_id=None) -> dict:
     """{verdict, retake, reading, injection_flag} (reader contract)."""
     check = assess_image(data)
-    # A black crash screen is dark across the whole frame, so a dark
-    # frame goes to Spark and Spark judges legibility. Size, blur and
-    # glare still stop here with no model call.
-    if check["verdict"] == "retake" and (
-            check["retake"] or {}).get("reason") != "too_dark":
+    # The black crash screen passes the gate on its bright text. A frame
+    # dark all over, a small file, glare or blur stop here with no call.
+    if check["verdict"] == "retake":
         return {"verdict": "retake", "retake": check["retake"],
                 "reading": {"quality": check["quality"],
                             "prompt_version": PROMPT_VERSION},
