@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ msp_name }} - more information needed</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/eyewitness/customer.css') }}">
+</head>
+<body>
+<main class="ew">
+  <p class="ew-msp">{{ msp_name }}</p>
+  <h1>Help us fix this faster</h1>
+  <p>Please work through the steps below. You can skip anything you can't do. Photos are checked as soon as they arrive, and we will tell you if one needs retaking. Your photos are only used for this ticket.</p>
+
+  <ol class="ew-items">
+  {% for item in row.items %}
+    <li class="ew-item" data-item-id="{{ item.id }}" data-kind="{{ item.kind }}" data-max-seconds="{{ item.max_seconds or '' }}">
+      <h2>{{ loop.index }}. {{ item.title }}</h2>
+      <p>{{ item.instruction }}</p>
+      {% if item.kind == 'photo' %}
+      <label class="ew-btn">Take photo
+        <input type="file" accept="image/*" capture="environment" data-capture>
+      </label>
+      {% elif item.kind == 'video' %}
+      <label class="ew-btn">Record video
+        <input type="file" accept="video/*" capture="environment" data-capture>
+      </label>
+      {% elif item.kind == 'voice' %}
+      <label class="ew-btn">Record voice note
+        <input type="file" accept="audio/*" capture data-capture>
+      </label>
+      {% endif %}
+      <button type="button" class="ew-skip" data-skip>I can't do this</button>
+      <p class="ew-status" data-status role="status"></p>
+      {% if item.open_until %}<p class="ew-note">We'll keep this open for 7 days. Come back to this link when it happens again.</p>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+
+  <div class="ew-voice-offer" data-voice-offer hidden>
+    <p>Prefer to just tell us? Record a short voice note instead.</p>
+    <button type="button" data-voice-accept>Record a voice note</button>
+    <button type="button" data-voice-decline>No thanks</button>
+  </div>
+
+  <button type="button" class="ew-done" data-done>Done</button>
+  <p class="ew-done-msg" data-done-msg role="status"></p>
+</main>
+<script nonce="{{ csp_nonce() }}" src="{{ url_for('static', filename='js/eyewitness/capture.js') }}"></script>
+</body>
+</html>

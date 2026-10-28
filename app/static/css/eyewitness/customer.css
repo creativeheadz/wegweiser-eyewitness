@@ -1,0 +1,10 @@
+/* Eyewitness customer page: mobile-first, no Wegweiser chrome. */
+.ew { max-width: 42rem; margin: 0 auto; padding: 1rem; font-family: system-ui, sans-serif; line-height: 1.5; color: #1a1a1a; }
+.ew-msp { font-weight: 600; }
+.ew-items { padding-left: 1.2rem; }
+.ew-item { margin-bottom: 1.5rem; }
+.ew-btn { display: inline-block; padding: 0.6rem 1rem; border: 1px solid #1a1a1a; border-radius: 0.4rem; cursor: pointer; }
+.ew-btn input { display: none; }
+.ew-skip { margin-left: 0.5rem; }
+.ew-status { min-height: 1.2em; }
+.ew-done { padding: 0.7rem 1.4rem; font-size: 1rem; }

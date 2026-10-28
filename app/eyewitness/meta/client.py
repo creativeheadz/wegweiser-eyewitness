@@ -1,0 +1,262 @@
+"""Eyewitness's own Meta client: cache, daily cap, cost log, one retry.
+
+The key is Eyewitness's own (`EYEWITNESS_META_API_KEY`), read only here.
+It deliberately does NOT go through the tenant AI config or
+`_non_production_guard`: that guard stops the broad AI features from
+spending outside production, while Eyewitness has an explicit separate
+key and a hard daily cap (`EYEWITNESS_DAILY_USD_CAP`, default 5.00).
+No key set means "not configured": callers skip the paid steps, log it,
+and release tickets to the governor unchanged. Never contributor models
+for customer evidence.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import time
+
+from . import prices
+
+logger = logging.getLogger(__name__)
+
+BASE_URL = "https://api.meta.ai/v1"
+DEFAULT_SPARK_MODEL = "muse-spark-1.3"
+SPARK_MIN_TOKENS = 6144  # Muse Spark always reasons; see ai_provider.py
+
+
+def api_key() -> str:
+    return (os.environ.get("EYEWITNESS_META_API_KEY") or "").strip()
+
+
+def configured() -> bool:
+    return bool(api_key())
+
+
+def cache_key(kind: str, payload) -> str:
+    raw = json.dumps({"kind": kind, "payload": payload},
+                     sort_keys=True, default=str).encode()
+    return hashlib.sha256(raw).hexdigest()
+
+
+def daily_cap_usd() -> float:
+    try:
+        return float(os.environ.get("EYEWITNESS_DAILY_USD_CAP", "5.00"))
+    except ValueError:
+        return 5.00
+
+
+class MetaNotConfigured(RuntimeError):
+    pass
+
+
+class DailyCapExceeded(RuntimeError):
+    pass
+
+
+class MetaClient:
+    """One client for every Eyewitness Meta call.
+
+    `log_call`/`cache_get`/`cache_put`/`spent_today` are injectable so the
+    spike and the pure tests run without a database. In the app they are
+    bound to eyewitness_meta_calls / eyewitness_meta_cache.
+    """
+
+    def __init__(self, key: str | None = None, *, log_call=None,
+                 cache_get=None, cache_put=None, spent_today=None):
+        self._key = api_key() if key is None else key
+        self._log_call = log_call
+        self._cache_get = cache_get
+        self._cache_put = cache_put
+        self._spent_today = spent_today
+        self._mem_cache: dict = {}
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self._key)
+
+    def _spent(self) -> float:
+        return float(self._spent_today()) if self._spent_today else 0.0
+
+    def _check_cap(self, estimate: float = 0.0) -> None:
+        if self._spent() + estimate > daily_cap_usd():
+            raise DailyCapExceeded("Eyewitness daily Meta cap reached")
+
+    def _cached(self, key: str):
+        if os.environ.get("EYEWITNESS_CACHE", "on").lower() in ("0", "off", "false"):
+            return None
+        if self._cache_get:
+            return self._cache_get(key)
+        return self._mem_cache.get(key)
+
+    def _store(self, key: str, value) -> None:
+        if self._cache_put:
+            self._cache_put(key, value)
+        else:
+            self._mem_cache[key] = value
+
+    def _record(self, kind, model, usage, units, usd, cache_hit, ms,
+                intake_run_id=None, capture_id=None) -> None:
+        row = {"kind": kind, "model": model,
+               "input_tokens": int(usage.get("input_tokens") or 0),
+               "cached_tokens": int(usage.get("cached_tokens") or 0),
+               "output_tokens": int(usage.get("output_tokens") or 0),
+               "units": int(units or 0), "usd": float(usd),
+               "cache_hit": bool(cache_hit), "ms": int(ms)}
+        if self._log_call:
+            try:
+                self._log_call({**row, "intake_run_id": intake_run_id,
+                                "capture_id": capture_id})
+                return
+            except Exception:  # logging must never break the read
+                logger.exception("eyewitness meta log failed")
+        logger.info("eyewitness meta %s %s usd=%.5f cache=%s",
+                    kind, model, usd, cache_hit)
+
+    def spark_json(self, *, system: str, user_content, schema: dict,
+                   model: str | None = None, kind: str = "spark",
+                   intake_run_id=None, capture_id=None) -> dict:
+        """One Spark structured-output call. Returns the parsed JSON dict.
+
+        `user_content` is an OpenAI content list (text / image_url parts).
+        Raises MetaNotConfigured with no key; callers degrade gracefully.
+        """
+        if not self.is_configured:
+            raise MetaNotConfigured("not configured")
+        model = model or os.environ.get("EYEWITNESS_SPARK_MODEL",
+                                        DEFAULT_SPARK_MODEL)
+        if "-contributor" in model:
+            raise ValueError("contributor models never read customer evidence")
+        key = cache_key(kind, {"model": model, "system": system,
+                               "user": user_content, "schema": schema})
+        hit = self._cached(key)
+        if hit is not None:
+            self._record(kind, model, {}, 0, 0.0, True, 0,
+                         intake_run_id, capture_id)
+            return hit if isinstance(hit, dict) else json.loads(hit)
+        self._check_cap()
+        from openai import OpenAI
+        client = OpenAI(api_key=self._key, base_url=BASE_URL)
+        started = time.time()
+        last_exc = None
+        for attempt in (1, 2):
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": user_content}],
+                    max_tokens=max(SPARK_MIN_TOKENS, 6144),
+                    response_format={"type": "json_schema",
+                                     "json_schema": {"name": "eyewitness",
+                                                     "schema": schema,
+                                                     "strict": True}},
+                    extra_body={"reasoning_effort": "minimal"})
+                break
+            except Exception as exc:  # retry once on 429/5xx only
+                last_exc = exc
+                status = getattr(exc, "status_code", None)
+                if attempt == 2 or (status is not None
+                                    and status < 500 and status != 429):
+                    raise
+                time.sleep(1.0)
+        else:
+            raise last_exc  # pragma: no cover
+        ms = int((time.time() - started) * 1000)
+        usage = getattr(resp, "usage", None)
+        usage_d = {"input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                   "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                   "cached_tokens": 0}
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            usage_d["cached_tokens"] = getattr(details, "cached_tokens", 0) or 0
+        text = resp.choices[0].message.content or "{}"
+        parsed = json.loads(text)
+        usd = prices.usd_for(kind, **usage_d)
+        self._store(key, parsed)
+        self._record(kind, model, usage_d, 0, usd, False, ms,
+                     intake_run_id, capture_id)
+        return parsed
+
+    def sam_segment(self, *, concept: str, media_part: dict,
+                    intake_run_id=None, capture_id=None) -> str:
+        """One SAM 3.1 concept on one image or video. Returns raw text.
+
+        `media_part` is an OpenAI Responses content part (input_image /
+        input_video). Streamed; the concatenated text is what
+        sam_parser.parse_sam_text consumes.
+        """
+        if not self.is_configured:
+            raise MetaNotConfigured("not configured")
+        key = cache_key("sam", {"concept": concept, "media": media_part})
+        hit = self._cached(key)
+        if hit is not None:
+            self._record("sam", "sam-3.1", {}, 0, 0.0, True, 0,
+                         intake_run_id, capture_id)
+            return hit if isinstance(hit, str) else json.dumps(hit)
+        self._check_cap(estimate=0.02)
+        import requests
+        started = time.time()
+        resp = requests.post(
+            f"{BASE_URL}/responses",
+            headers={"Authorization": f"Bearer {self._key}",
+                     "Content-Type": "application/json"},
+            json={"model": "sam-3.1", "stream": True,
+                  "input": [{"role": "user", "content": [
+                      {"type": "input_text", "text": concept}, media_part]}],
+                  "metadata": {"mask_encoding": "one_bit"}},
+            timeout=180, stream=True)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"SAM returned {resp.status_code}")
+        text = resp.text
+        ms = int((time.time() - started) * 1000)
+        frames = 0
+        self._store(key, text)
+        self._record("sam", "sam-3.1", {}, frames,
+                     prices.sam_usd(frames=frames or SAM_MIN_FRAMES_FALLBACK),
+                     False, ms, intake_run_id, capture_id)
+        return text
+
+
+SAM_MIN_FRAMES_FALLBACK = 50
+
+
+def db_bound_client() -> MetaClient:
+    """A client bound to the eyewitness_meta_* tables (app context)."""
+    from app.models import db
+    from app.eyewitness.models import MetaCache, MetaCall
+
+    def _get(k):
+        row = MetaCache.query.get(k)
+        if row is None:
+            return None
+        try:
+            return json.loads(row.response)
+        except (TypeError, ValueError):
+            return row.response
+
+    def _put(k, v):
+        row = MetaCache.query.get(k) or MetaCache(key=k)
+        row.response = v if isinstance(v, str) else json.dumps(v)
+        row.created_at = int(time.time())
+        db.session.add(row)
+        db.session.commit()
+
+    def _log(d):
+        db.session.add(MetaCall(
+            intake_run_id=d.get("intake_run_id"),
+            capture_id=d.get("capture_id"), kind=d["kind"], model=d["model"],
+            input_tokens=d["input_tokens"], cached_tokens=d["cached_tokens"],
+            output_tokens=d["output_tokens"], units=d["units"], usd=d["usd"],
+            cache_hit=d["cache_hit"], ms=d["ms"],
+            created_at=int(time.time())))
+        db.session.commit()
+
+    def _spent():
+        start = int(time.time()) - int(time.time()) % 86400
+        total = (db.session.query(db.func.coalesce(db.func.sum(MetaCall.usd), 0))
+                 .filter(MetaCall.created_at >= start).scalar())
+        return float(total or 0)
+
+    return MetaClient(log_call=_log, cache_get=_get, cache_put=_put,
+                      spent_today=_spent)

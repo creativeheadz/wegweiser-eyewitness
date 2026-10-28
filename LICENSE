@@ -1,0 +1,6 @@
+LICENSE DECISION PENDING (Andrei, before first publish).
+
+Default per the build brief, section 11: the Wegweiser Fair Code
+License text. This placeholder ships in the repo so the public-repo
+layout (publish.sh renames this file to LICENSE) is fixed; it is
+replaced with the chosen license text before the first publish.

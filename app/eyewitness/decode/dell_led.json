@@ -1,0 +1,17 @@
+{
+  "vendor": "Dell",
+  "note": "Diagnostic LED patterns (amber blinks, pause, white blinks). Verify against the service manual for the exact model before acting; patterns vary by generation.",
+  "sources": [
+    "Dell OptiPlex diagnostic LED documentation (support.dell.com, diagnostic indicator reference)",
+    "Dell Latitude diagnostic LED codes (service manuals, power button LED / battery LED chapters)"
+  ],
+  "patterns": {
+    "amber:2 white:1": "Possible processor failure",
+    "amber:2 white:2": "Possible system board failure",
+    "amber:2 white:3": "Memory not detected / no memory installed",
+    "amber:2 white:4": "Memory configuration error",
+    "amber:2 white:5": "Possible coin-cell battery failure",
+    "amber:3 white:1": "Possible RTC / chipset issue (model dependent)",
+    "amber:3 white:3": "Possible recovery image not found (model dependent)"
+  }
+}

@@ -1,0 +1,30 @@
+{#- Technician Eyewitness panel: status, link + QR, captures, cost.
+    Technician only. No model names or token counts here beyond the
+    Meta spend total the brief asks for (M9). -#}
+<section class="fk-panel hd-panel ew-panel" data-ew-panel data-ticket="{{ rec.id }}">
+  <div class="fk-detail-head"><span class="fk-detail-head__title">Eyewitness evidence</span></div>
+  <p class="hd-hint">Meta spend on this ticket: ${{ '%.4f'|format(meta_usd) }}</p>
+  {% if not reqs %}
+  <p class="hd-hint">No evidence requested yet.</p>
+  {% endif %}
+  {% for r in reqs %}
+  <div class="ew-req">
+    <p><strong>{{ r.status }}</strong> · expires {{ r.expires_at|timestamp_to_datetime }}
+      {% if r.delivered_via %}· {{ r.delivered_via }}{% endif %}</p>
+    <p><a href="{{ base }}/eyewitness/{{ r.token }}">{{ base }}/eyewitness/{{ r.token }}</a></p>
+    {% if qr.get(r.token) %}<p><img src="{{ qr[r.token] }}" alt="QR code for the evidence link" width="160" height="160"></p>{% endif %}
+    {% if r.filter_hits %}<p>Outgoing filter: {{ r.filter_hits }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <form data-ew-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset>
+      <legend>Request evidence manually</legend>
+      {% for key, spec in [('screen_photo','Screen photo'),('power_light_video','Power light video'),('sticker','Sticker photo'),('voice_note','Voice note')] %}
+      <label><input type="checkbox" name="templates" value="{{ key }}"> {{ spec }}</label>
+      {% endfor %}
+    </fieldset>
+    <button type="submit" class="fk-btn fk-btn--primary fk-btn--sm">Create request</button>
+    <p data-ew-msg role="status"></p>
+  </form>
+</section>
