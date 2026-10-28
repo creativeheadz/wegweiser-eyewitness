@@ -255,7 +255,7 @@ def test_phone_captions_sit_beside_or_below_and_address_stays_clear():
     text = (ROOT / "eyewitness/demo/build_video.py").read_text(
         encoding="utf-8")
     assert 'visual_rel.startswith("phone/")' in text
-    assert "x=680:y=460" in text
+    assert "x=560:y=830" in text
     assert "y=1620" in text
     assert "y=h-340" in text
     assert "y=h-220" not in text

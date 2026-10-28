@@ -605,10 +605,65 @@ def make_scene9(sticky: Path, demo_dir: Path,
     return target
 
 
+def _scene9_closeup(base, t: float, beat_s: float):
+    """Beat one: a close view of the words on the note itself."""
+    from PIL import Image
+    bw, bh = base.size
+    frac = min(max(t / max(beat_s, 0.1), 0.0), 1.0)
+    zoom = 1.0 + 0.14 * frac
+    cw = bw * 0.56 / zoom
+    ch = cw * 9 / 16
+    cx, cy = bw * 0.70, bh * 0.66
+    x0 = int(min(max(cx - cw / 2, 0), bw - cw))
+    y0 = int(min(max(cy - ch / 2, 0), bh - ch))
+    crop = base.crop((x0, y0, int(x0 + cw), int(y0 + ch)))
+    return crop.resize((W, H), Image.LANCZOS)
+
+
+# The customer note lines in the scene 4 take, in the page area
+# the desktop recorder captured (1280 by 720 at the top left).
+_SCENE9_NOTE_BOXES = [(350, 248, 772, 290), (350, 295, 776, 335),
+                      (350, 338, 652, 362)]
+
+
+def _scene9_zammad_frames(zammad: Path, beat_s: float, fps: int):
+    """Beat three frames: the customer note, items lit in turn."""
+    import cv2
+    cap = cv2.VideoCapture(str(zammad))
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    start_s, span_s = 26.5, 8.0
+    frames = []
+    count = max(int(beat_s * fps), 1)
+    for i in range(count):
+        at = start_s + span_s * (i / max(count - 1, 1))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(at * src_fps))
+        ok, frame = cap.read()
+        if not ok:
+            break
+        page = frame[0:720, 0:1280]
+        third = min(int(3 * i / count), 2)
+        x1, y1, x2, y2 = _SCENE9_NOTE_BOXES[third]
+        import numpy as np
+        tint = page.copy()
+        cv2.rectangle(tint, (x1, y1), (x2, y2), (60, 140, 255), -1)
+        page = cv2.addWeighted(page, 0.82, tint, 0.18, 0)
+        cv2.rectangle(page, (x1, y1), (x2, y2), (60, 140, 255), 3)
+        frames.append(cv2.resize(page, (W, H)))
+    cap.release()
+    return frames
+
+
 def make_scene9_video(sticky: Path, demo_dir: Path,
                       excerpt: str = "",
-                      seconds: int = 14) -> Path:
-    """Scene 9 as a clip: the flag panel animates in."""
+                      seconds: int = 14,
+                      zammad: Path | None = None) -> Path:
+    """Scene 9 as a clip in three beats on the spoken lines.
+
+    The note text fills the frame first. The flag panel with its
+    treated-as-data verdict follows. The last beat cuts to the
+    customer note from the scene 4 take, its link blurred in that
+    take, with items A, B and C lit one after another.
+    """
     from PIL import Image
     out_dir = demo_dir / "overlays"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -618,9 +673,26 @@ def make_scene9_video(sticky: Path, demo_dir: Path,
     work = Path(tempfile.mkdtemp(prefix="eyewitness-overlay9-"))
     try:
         fps = 15
-        for i in range(seconds * fps):
-            _scene9_frame(base, excerpt, i / fps).save(
-                work / f"f{i:04d}.png", format="PNG")
+        total = seconds * fps
+        cut1 = int(total * 0.19)
+        cut2 = int(total * 0.48)
+        beat3 = []
+        if zammad is not None and zammad.exists():
+            beat3 = _scene9_zammad_frames(
+                zammad, seconds * (total - cut2) / total, fps)
+        for i in range(total):
+            t = i / fps
+            if i < cut1:
+                frame = _scene9_closeup(base, t, cut1 / fps)
+            elif i < cut2 or not beat3:
+                frame = _scene9_frame(base, excerpt,
+                                      2.0 + (i - cut1) / fps)
+            else:
+                import cv2
+                pick = min(i - cut2, len(beat3) - 1)
+                frame = Image.fromarray(
+                    cv2.cvtColor(beat3[pick], cv2.COLOR_BGR2RGB))
+            frame.save(work / f"f{i:04d}.png", format="PNG")
         _encode_frames(work, fps, target)
     finally:
         import shutil
@@ -640,6 +712,8 @@ def main() -> int:
     parser.add_argument("--voice", default="",
                         help="voice note file; its reading sets the card")
     parser.add_argument("--excerpt", default="")
+    parser.add_argument("--zammad", default="",
+                        help="scene 4 desktop take for the last beat")
     args = parser.parse_args()
     if not args.demo_dir:
         print("EYEWITNESS_DEMO_DIR not set")
@@ -666,7 +740,9 @@ def main() -> int:
     if args.sticky:
         make_scene9(Path(args.sticky), demo_dir, excerpt=args.excerpt)
         make_scene9_video(Path(args.sticky), demo_dir,
-                          excerpt=args.excerpt)
+                          excerpt=args.excerpt,
+                          zammad=Path(args.zammad) if args.zammad
+                          else None)
     total = sum(c["usd"] for c in calls)
     print(f"overlays: {len(calls)} calls, ${total:.4f}")
     return 0

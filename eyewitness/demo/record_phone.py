@@ -187,7 +187,9 @@ def _launch(pw, out_dir: Path, y4m: Path | None, *, record: bool = True):
     return browser, context
 
 
-def scene5(page, url: str) -> None:
+def scene5(page, url: str, demo_dir: Path) -> None:
+    started = time.time()
+    marks: dict = {}
     page.goto(url, wait_until="networkidle", timeout=60000)
     page.wait_for_timeout(1800)
     items = page.locator("[data-item-id]")
@@ -198,6 +200,7 @@ def scene5(page, url: str) -> None:
     page.wait_for_timeout(3200)
     _tap(page, photo.locator("[data-take-photo]"))
     heard = _wait_status(page, photo, "Please retake", 120)
+    marks["retake_s"] = round(time.time() - started, 1)
     print(f"record_phone: scene 5 first verdict: {heard[:90]}")
     # The feed is sharp by now. Open the camera again and retake.
     # A reopened fake camera may restart its file, so hold until
@@ -211,18 +214,20 @@ def scene5(page, url: str) -> None:
         print(f"record_phone: scene 5 verdict {attempt + 2}: "
               f"{heard[:90]}")
         if "Got it" in heard:
+            marks["got_it_s"] = round(time.time() - started, 1)
             break
     page.wait_for_timeout(2200)
+    sidecar = demo_dir / "phone" / "scene05-times.json"
+    sidecar.write_text(json.dumps(marks), encoding="utf-8")
 
 
 def scene6(page, url: str, blink: Path, demo_dir: Path) -> None:
-    """Film the light, then send the clip the server can read.
+    """Film the light with the live recorder and nothing else.
 
-    The live recording runs through its countdown and stops. A
-    Chrome recorder file carries no duration, so the server
-    asks for a retake; the same clip then goes through the
-    page's video file button and the server reads it in full.
-    Event times land in a sidecar for the edit.
+    The recording runs through its countdown, stops at about
+    twelve seconds, sends, and waits for the server verdict on
+    that same clip. Event times land in a sidecar for the edit.
+    A refusal stops the run; no file button stands in for it.
     """
     started = time.time()
     marks: dict = {}
@@ -238,19 +243,21 @@ def scene6(page, url: str, blink: Path, demo_dir: Path) -> None:
     page.wait_for_timeout(1500)
     _tap(page, video.locator("[data-record-video]"))
     marks["record_tap_s"] = round(time.time() - started, 1)
-    # Countdown (3 s) plus the full recording (15 s), then upload.
-    page.wait_for_timeout(20000)
-    heard = _wait_status(page, video, "Please retake", 90)
-    marks["retake_s"] = round(time.time() - started, 1)
-    print(f"record_phone: scene 6 live verdict: {heard[:90]}")
-    page.wait_for_timeout(1500)
-    video.locator("[data-capture]").set_input_files(str(blink))
-    heard = _wait_status(page, video, "Got it", 300)
+    # Countdown (3 s) plus about twelve seconds of recording.
+    page.wait_for_timeout(15000)
+    _tap(page, video.locator("[data-stop-video]"))
+    marks["stop_s"] = round(time.time() - started, 1)
+    heard = _wait_status(
+        page, video, ("Got it", "Please retake", "That did not work"),
+        300)
     marks["got_it_s"] = round(time.time() - started, 1)
-    print(f"record_phone: scene 6 file verdict: {heard[:90]}")
+    print(f"record_phone: scene 6 live verdict: {heard[:90]}")
     page.wait_for_timeout(2200)
     sidecar = demo_dir / "phone" / "scene06-times.json"
     sidecar.write_text(json.dumps(marks), encoding="utf-8")
+    if "Got it" not in heard:
+        raise SystemExit(
+            f"record_phone: live clip refused: {heard[:90]}")
 
 
 def finish(page, url: str) -> None:
@@ -323,7 +330,7 @@ def record(url: str, scene: int, demo_dir: Path,
         browser, context = _launch(pw, out_dir, y4m)
         page = context.new_page()
         if scene == 5:
-            scene5(page, url)
+            scene5(page, url, demo_dir)
         else:
             scene6(page, url, fake_source, demo_dir)
         video_path = None
@@ -373,7 +380,8 @@ def main() -> int:
         return wait_triage(demo_dir, Path(args.env_file))
     url = args.url
     if not url:
-        url = _read_env_file(Path(args.env_file)).get("CUSTOMER_URL", "")
+        env = _read_env_file(Path(args.env_file))
+        url = env.get("PHONE_CUSTOMER_URL") or env.get("CUSTOMER_URL", "")
     if not url:
         print("no customer page address (--url or CUSTOMER_URL)")
         return 2

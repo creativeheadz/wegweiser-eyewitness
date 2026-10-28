@@ -478,49 +478,96 @@ def _desktop_base(take: Path, duration: float, work: Path, name: str,
     take_dur = _probe_duration(take)
     speed = max(take_dur / max(duration, 0.1), 0.05) if take_dur else 1.0
     frames = max(int(duration * FPS), 1)
+    # The zoom stays anchored to the left edge, so the whole
+    # navigation column stays in frame while the view pushes in.
     filt = (f"trim=start=1.2,setpts=(PTS-STARTPTS)/{speed:.4f},"
             f"crop=1280:720:0:0,fps={FPS},scale=1600:900,"
-            f"zoompan=z='1.0+0.30*on/{frames}':"
-            f"x='(iw-iw/zoom)*{fx}':y='(ih-ih/zoom)*{fy}':"
+            f"zoompan=z='1.0+0.16*on/{frames}':"
+            f"x='(iw-iw/zoom)*0.0':y='(ih-ih/zoom)*{fy}':"
             f"d=1:s=1920x1080:fps={FPS}")
     return _encode_base(["-i", str(take)], filt, duration,
                         work / name)
+
+
+def _phone_plan(scene: dict, demo_dir: Path, duration: float):
+    """How one phone take is cut to its scene, from recorder marks.
+
+    The head runs from the start of the take to the moment that
+    ends its first act. The tail runs in real time through the
+    accepted verdict and the step moving on. Callout windows say
+    which part of the phone screen the enlarged crop shows, in
+    edited time. None of this exists without the marks, and the
+    caller then plays the take as it stands.
+    """
+    number = int(scene.get("number") or 0)
+    sidecar = demo_dir / "phone" / f"scene{number:02d}-times.json"
+    if not sidecar.exists():
+        return None
+    try:
+        marks = json.loads(sidecar.read_text(encoding="utf-8"))
+        got_it = float(marks["got_it_s"])
+        if number == 5:
+            pivot = float(marks["retake_s"])
+            head_end = pivot + 0.1
+        elif number == 6:
+            pivot = float(marks["stop_s"])
+            record_tap = float(marks["record_tap_s"])
+            head_end = pivot + 1.0
+        else:
+            return None
+    except (ValueError, KeyError, TypeError, OSError):
+        return None
+    tail_start = got_it - (2.6 if number == 5 else 3.0)
+    tail_end = got_it + 2.3
+    tail_dur = max(tail_end - tail_start, 0.5)
+    # Scene 5 holds the retake frame for a beat so the advice
+    # can be read. The hold sits between the head and the tail.
+    freeze = 1.3 if number == 5 else 0.0
+    play_dur = max(duration - tail_dur - freeze, 1.0)
+    head_speed = max(head_end / play_dur, 0.05)
+    head_dur = play_dur + freeze
+    if number == 5:
+        windows = [("status", max(pivot / head_speed - 0.9, 0.0),
+                    head_dur + 0.3),
+                   ("status", head_dur + 2.2, duration)]
+    else:
+        windows = [("timer", max((record_tap - 0.3) / head_speed, 0.0),
+                    head_dur + 0.4),
+                   ("status", head_dur + 2.2, duration)]
+    return {"head_end": head_end, "tail_start": tail_start,
+            "tail_end": tail_end, "head_dur": head_dur,
+            "head_speed": head_speed, "windows": windows,
+            "pivot": pivot, "freeze": freeze}
 
 
 def _phone_composite(scene: dict, take: Path, demo_dir: Path,
                      duration: float, work: Path) -> Path:
     """The phone source for one scene, joined where it is two acts.
 
-    Scene 6 films, hears a retake on the recorder file, then
-    sends the same clip as a file. The edit cuts from the stop
-    of the recording to the accepted verdict, using the times
-    the recorder saved.
+    Scene 5 takes a blurred photo, hears the retake advice, then
+    takes a sharp one. Scene 6 films through its countdown and
+    recording, then sends. Each edit cuts from the first act to
+    the accepted verdict, using the times the recorder saved.
     """
-    if int(scene.get("number") or 0) != 6:
+    plan = _phone_plan(scene, demo_dir, duration)
+    if plan is None:
         return take
-    sidecar = demo_dir / "phone" / "scene06-times.json"
-    if not sidecar.exists():
-        return take
-    try:
-        marks = json.loads(sidecar.read_text(encoding="utf-8"))
-        retake = float(marks["retake_s"])
-        got_it = float(marks["got_it_s"])
-    except (ValueError, KeyError, TypeError, OSError):
-        return take
-    # The recording starts a breath before the recorder's clock.
-    # The head ends while the page still sends, before the
-    # retake line lands; detection of that line lags it.
-    head_end = retake + 0.8 - 2.2
-    got_it += 0.8
-    tail = 3.4
-    head_dur = max(duration - tail, 1.0)
-    head_speed = max(head_end / head_dur, 0.05)
-    joined = work / "base-06-joined.mp4"
-    filt = (f"[0:v]trim=start=0:end={head_end:.2f},"
-            f"setpts=(PTS-STARTPTS)/{head_speed:.4f}[a];"
-            f"[0:v]trim=start={max(got_it - 2.4, 0):.2f}:"
-            f"end={got_it + 1.6:.2f},setpts=PTS-STARTPTS[b];"
-            f"[a][b]concat=n=2:v=1:a=0,fps={FPS}")
+    number = int(scene.get("number") or 0)
+    joined = work / f"base-{number:02d}-joined.mp4"
+    filt = (f"[0:v]trim=start=0:end={plan['head_end']:.2f},"
+            f"setpts=(PTS-STARTPTS)/{plan['head_speed']:.4f}[a];")
+    parts = "[a]"
+    if plan["freeze"]:
+        pivot = plan["pivot"]
+        filt += (f"[0:v]trim=start={pivot:.2f}:end={pivot + 0.05:.2f},"
+                 f"setpts=PTS-STARTPTS,"
+                 f"tpad=stop_mode=clone:stop_duration={plan['freeze']},"
+                 f"fps={FPS}[f];")
+        parts += "[f]"
+    count = 3 if plan["freeze"] else 2
+    filt += (f"[0:v]trim=start={max(plan['tail_start'], 0):.2f}:"
+             f"end={plan['tail_end']:.2f},setpts=PTS-STARTPTS[b];"
+             f"{parts}[b]concat=n={count}:v=1:a=0,fps={FPS}")
     cmd = ["ffmpeg", "-y", "-nostdin", "-protocol_whitelist", "file",
            "-i", str(take), "-filter_complex", filt,
            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(FPS),
@@ -530,7 +577,8 @@ def _phone_composite(scene: dict, take: Path, demo_dir: Path,
 
 
 def _phone_base(take: Path, duration: float, work: Path, name: str,
-                *, vertical: bool = False) -> Path:
+                *, vertical: bool = False, scene: dict | None = None,
+                demo_dir: Path | None = None) -> Path:
     take_dur = _probe_duration(take)
     speed = 1.0
     if take_dur and take_dur > duration:
@@ -539,11 +587,48 @@ def _phone_base(take: Path, duration: float, work: Path, name: str,
         filt = (f"setpts=PTS/{speed:.4f},fps={FPS},"
                 f"scale=693:1500:force_original_aspect_ratio=decrease,"
                 f"pad=1080:1920:(ow-iw)/2:30:color=0x14161a")
-    else:
+        return _encode_base(["-i", str(take)], filt, duration,
+                            work / name)
+    plan = _phone_plan(scene, demo_dir, duration) \
+        if scene is not None and demo_dir is not None else None
+    if plan is None:
         filt = (f"setpts=PTS/{speed:.4f},fps={FPS},"
-                f"scale=462:1000:force_original_aspect_ratio=decrease,"
-                f"pad=1920:1080:110:(oh-ih)/2:color=0x14161a")
-    return _encode_base(["-i", str(take)], filt, duration, work / name)
+                f"scale=499:1080:force_original_aspect_ratio=decrease,"
+                f"pad=1920:1080:0:0:color=0x14161a")
+        return _encode_base(["-i", str(take)], filt, duration,
+                            work / name)
+    # The phone fills the frame height on the left. On the right
+    # an enlarged crop of the same take shows what matters at
+    # that moment, synced by the windows in the plan. The crop
+    # runs at twice the scale the phone itself is shown at.
+    crops = {"head": "crop=390:300:0:20,scale=1000:768",
+             "status": "crop=390:300:0:520,scale=1000:768",
+             "timer": "crop=390:300:0:340,scale=1000:768"}
+    kinds = ["head"] + [kind for kind, _t0, _t1 in plan["windows"]]
+    splits = "".join(f"[s{i}]" for i in range(len(kinds) + 1))
+    graph = f"[0:v]setpts=PTS/{speed:.4f},fps={FPS},split={len(kinds) + 1}{splits};"
+    graph += "[s0]scale=499:1080[phone]"
+    for i, kind in enumerate(kinds):
+        graph += (f";[s{i + 1}]{crops[kind]},"
+                  "drawbox=x=0:y=0:w=iw:h=ih:color=white:t=3"
+                  f"[cal{i}]")
+    graph += (";color=c=0x14161a:s=1920x1080:r=" + str(FPS) + "[bg];"
+              "[bg][phone]overlay=0:0[stage];"
+              "[stage][cal0]overlay=560:30[stage2]")
+    label = "stage2"
+    for i, (kind, t0, t1) in enumerate(plan["windows"]):
+        out = f"stage{i + 3}"
+        graph += (f";[{label}][cal{i + 1}]overlay=560:30:"
+                  f"enable='between(t,{t0:.2f},{t1:.2f})'[{out}]")
+        label = out
+    graph += f";[{label}]format=yuv420p[v]"
+    target = work / name
+    cmd = ["ffmpeg", "-y", "-nostdin", "-protocol_whitelist", "file",
+           "-i", str(take), "-filter_complex", graph, "-map", "[v]",
+           "-t", f"{duration:.2f}", "-c:v", "libx264",
+           "-pix_fmt", "yuv420p", "-r", str(FPS), "-an", str(target)]
+    _run(cmd, timeout=600)
+    return target
 
 
 def _overlay_base(take: Path, duration: float, work: Path, name: str,
@@ -592,7 +677,8 @@ def _base_for(scene: dict, demo_dir: Path, work: Path, duration: float,
                                   work)
         return _phone_base(source, duration, work,
                            f"base-{number:02d}-{tag}.mp4",
-                           vertical=vertical)
+                           vertical=vertical, scene=scene,
+                           demo_dir=demo_dir)
     if visual_rel.startswith("overlays/"):
         return _overlay_base(visual, duration, work,
                              f"base-{number:02d}-{tag}.mp4",
@@ -650,21 +736,25 @@ def _segment(scene: dict, demo_dir: Path, work: Path, duration: float,
                    "fontsize=30:fontcolor=white:box=1:boxcolor=black@0.55:"
                    f"boxborderw=12:x=(w-tw)/2:y=h-340:"
                    f"enable='gte(t,{start:.2f})'")
+    # A caption lives inside its own scene only. It cuts in
+    # after the picture crossfade lands and cuts out before the
+    # next one starts, so two captions never share a frame.
+    cap_window = f":enable='between(t,0.55,{max(duration - 0.55, 0.6):.2f})'"
     if is_phone and not vertical:
         caption_draw = (
             f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
             "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
-            "x=680:y=460:line_spacing=6")
+            "x=560:y=830:line_spacing=6" + cap_window)
     elif is_phone and vertical:
         caption_draw = (
             f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
             "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
-            "x=(w-tw)/2:y=1620:line_spacing=6")
+            "x=(w-tw)/2:y=1620:line_spacing=6" + cap_window)
     else:
         caption_draw = (
             f",drawtext=fontfile={FONT_REG}:textfile={cap_file}:fontsize=30:"
             "fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:"
-            "x=(w-tw)/2:y=h-150:line_spacing=6")
+            "x=(w-tw)/2:y=h-150:line_spacing=6" + cap_window)
     vfilter = f"fps={FPS}{badge}{title}{caption_draw}{endcard}"
     afilter = ("adelay=400|400,loudnorm=I=-14:TP=-1.5:LRA=11,apad,"
                f"atrim=0:{duration:.2f},"
