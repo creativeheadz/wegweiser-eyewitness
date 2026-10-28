@@ -257,12 +257,10 @@ def manual_request(ticket_id):
             items = [ew_requests.make_item(t) for t in templates]
         except (KeyError, ValueError):
             return jsonify({"error": "unknown template"}), 400
-        settings = db.session.get(TenantSettings, rec.tenant_uuid)
-        existing = EvidenceRequest.query.filter_by(
-            helpdesk_ticket_id=rec.id).count()
-        approval = ew_requests.needs_approval(
-            items, existing_requests=existing,
-            auto_send_templates=bool(settings and settings.auto_send_templates))
+        # A technician wrote this request, so they are its approver: the
+        # approval gate (brief 7.8) is for what the intake agent proposes.
+        # The outgoing filter below still applies to every customer-bound text.
+        approval = False
         token = ew_requests.new_token()
         link = url_for("eyewitness_bp.customer_page", token=token,
                        _external=True)
