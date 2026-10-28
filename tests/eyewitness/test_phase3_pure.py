@@ -274,3 +274,27 @@ def test_readers_leave_no_evidence_behind(monkeypatch, tmp_path):
     assert beeps_mod.beeps_from_file(str(tmp_path / "missing.mp4")) is None
     assert len(made) == 3
     assert not any(p.exists() for p in made)
+
+
+def _shaken_scene(blink: bool, frames: int = 60):
+    """A textured scene under hand shake, with or without a small
+    light going on and off in the upper left."""
+    rng = np.random.default_rng(7)
+    texture = (rng.random((280, 360)) > 0.5).astype(np.float64) * 160 + 40
+    out = []
+    for i in range(frames):
+        dx = int(round(3 * np.sin(i * 0.9)))
+        dy = int(round(2 * np.cos(i * 0.7)))
+        frame = texture[20 + dy:260 + dy, 20 + dx:340 + dx].copy()
+        if blink and (i // 5) % 2 == 0:
+            frame[60:72, 100:112] = 255.0
+        out.append(frame + rng.normal(0, 4, frame.shape))
+    return out
+
+
+def test_fallback_locator_ignores_shake_and_finds_the_light():
+    found = video.locate_by_motion(_shaken_scene(blink=True))
+    assert found is not None
+    assert found["x1"] <= 106 <= found["x2"]
+    assert found["y1"] <= 66 <= found["y2"]
+    assert video.locate_by_motion(_shaken_scene(blink=False)) is None

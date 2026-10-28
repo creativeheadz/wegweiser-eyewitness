@@ -28,6 +28,10 @@ DARK_MEAN = 12.0
 DARK_HIGHLIGHT = 40.0
 MOVEMENT_MAX = 18.0
 MIN_BLINK_RANGE = 10.0
+# The fallback locator's bar: the spread of a cell's mean brightness
+# once frames are lined up. A small blinking LED measured 17; a shaken
+# scene with no light measured under 4 (synthetic clips, 28 Oct).
+MIN_CELL_RANGE = 8.0
 
 RETAKE_ADVICE = {
     "too_short": "The clip is too short. Film the light for the full "
@@ -235,39 +239,68 @@ def measure_region_series(frames, box: dict) -> list[dict]:
     return series
 
 
+def _stabilise(stack):
+    """Line every frame up with the first (translation only).
+
+    Hand shake moves every edge in the picture, and a moving edge
+    looks like a changing light. Phase correlation measures each
+    frame's shift and the frame is moved back. OpenCV windows its
+    inputs in place, so it gets copies.
+    """
+    import cv2
+    import numpy as np
+    ref = stack[0].astype(np.float32)
+    window = cv2.createHanningWindow((ref.shape[1], ref.shape[0]),
+                                     cv2.CV_32F)
+    out = [ref.copy()]
+    for frame in stack[1:]:
+        cur = frame.astype(np.float32)
+        (dx, dy), _ = cv2.phaseCorrelate(ref.copy(), cur.copy(), window)
+        shift = np.float32([[1, 0, -dx], [0, 1, -dy]])
+        out.append(cv2.warpAffine(cur, shift, (cur.shape[1], cur.shape[0]),
+                                  borderMode=cv2.BORDER_REPLICATE))
+    return np.stack(out).astype(np.float64)
+
+
 def locate_by_motion(grey_frames, *, grid_rows: int = 12,
                      grid_cols: int = 16) -> dict | None:
-    """The grid cell whose brightness changes most over time.
+    """The grid cell whose mean brightness changes most over time.
 
-    The code-only fallback locator. Returns a box in the grey frames'
-    pixel coordinates with its range, or None when nothing changes
-    enough to be a blinking light.
+    The code-only fallback locator. Frames are lined up first, then
+    each interior cell is scored on the spread of its mean brightness
+    less the frame's mean (which takes out exposure drift). A light
+    going on and off moves its cell's mean; texture under hand shake
+    moves single pixels and leaves the mean almost still. The outer
+    ring of cells is left out, because lining up shifts the borders.
+    Returns a box in the grey frames' pixel coordinates with its
+    range, or None when nothing changes enough to be a blinking light.
     """
     import numpy as np
     if len(grey_frames) < 5:
         return None
-    stack = np.stack([f.astype(np.float64) for f in grey_frames])
-    spread = np.percentile(stack, 95, axis=0) \
-        - np.percentile(stack, 5, axis=0)
-    h, w = spread.shape
+    stack = _stabilise(np.stack([np.asarray(f) for f in grey_frames]))
+    frame_mean = stack.mean(axis=(1, 2))
+    h, w = stack.shape[1:]
     best = None
-    for r in range(grid_rows):
-        for c in range(grid_cols):
-            cell = spread[int(r * h / grid_rows):
-                          int((r + 1) * h / grid_rows),
-                          int(c * w / grid_cols):
-                          int((c + 1) * w / grid_cols)]
-            score = float(cell.mean()) if cell.size else 0.0
+    for r in range(1, grid_rows - 1):
+        for c in range(1, grid_cols - 1):
+            ys, ye = int(r * h / grid_rows), int((r + 1) * h / grid_rows)
+            xs, xe = int(c * w / grid_cols), int((c + 1) * w / grid_cols)
+            cell = stack[:, ys:ye, xs:xe]
+            if not cell.size:
+                continue
+            series = cell.mean(axis=(1, 2)) - frame_mean
+            score = float(np.percentile(series, 95)
+                          - np.percentile(series, 5))
             if best is None or score > best["range"]:
-                best = {"x1": int(c * w / grid_cols),
-                        "y1": int(r * h / grid_rows),
-                        "x2": int((c + 1) * w / grid_cols),
-                        "y2": int((r + 1) * h / grid_rows),
+                best = {"x1": xs, "y1": ys, "x2": xe, "y2": ye,
                         "w": int(w), "h": int(h), "range": score}
-    if best is None or best["range"] < MIN_BLINK_RANGE:
+    if best is None or best["range"] < MIN_CELL_RANGE:
         return None
     # Tighten the winning cell to the pixel that changes most, so the
     # counting region holds the light and little of the panel.
+    spread = np.percentile(stack, 95, axis=0) \
+        - np.percentile(stack, 5, axis=0)
     cell_spread = spread[best["y1"]:best["y2"], best["x1"]:best["x2"]]
     peak_y, peak_x = np.unravel_index(int(np.argmax(cell_spread)),
                                       cell_spread.shape)
