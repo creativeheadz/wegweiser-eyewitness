@@ -240,7 +240,10 @@ def help_evidence(token):
     from app.models.helpdesk import HelpRequest
     digest = hashlib.sha256((token or "").encode("utf-8")).hexdigest()
     req = HelpRequest.query.filter_by(token_hash=digest).first()
-    if req is None or req.status != "submitted" or not req.ticket_id:
+    # The help token's own lifetime bounds this endpoint, so a help
+    # address left in a browser history stops handing out the link.
+    if req is None or req.status != "submitted" or not req.ticket_id \
+            or int(req.expires_at or 0) < int(time.time()):
         return jsonify({"ready": False}), 404
     from app.eyewitness.models import EvidenceRequest
     from app.models.helpdesk import HelpdeskTicket

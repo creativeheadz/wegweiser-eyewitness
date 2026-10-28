@@ -41,7 +41,7 @@ migrates, deploys and runs the staging scenarios.
   files a help ticket through `help_intake`, checks the hold, the
   missing sticker item, the next-time item, the release, and a
   follow-up capture with no second governor run.
-- **Retention sweep, for real** (`app/eyewitness/retention.py`,
+- **Retention sweep, now live** (`app/eyewitness/retention.py`,
   migration `eyewitness_retention_20261028`, daily beat): capture
   files go `EYEWITNESS_RETENTION_DAYS` (default 90) after the ticket
   close, or after the request expiry where the close is unknown, and
@@ -111,7 +111,7 @@ the staging run below.
    `eyewitness_20261027`) and no new requirement. `opencv-python-headless`
    is already in `requirements.txt`; the local venv needed it
    installed for this run, and staging takes the same step:
-   - `cd /opt/wegweiser && FLASK_APP=wsgi.py venv/bin/flask db upgrade`
+   - `FLASK_APP=wsgi.py venv/bin/flask db upgrade`, in the app folder
    - `venv/bin/pip install -r requirements.txt`
 2. Confirm `EYEWITNESS_META_API_KEY` reads as configured in the app
    environment. Report it as configured or not configured only.

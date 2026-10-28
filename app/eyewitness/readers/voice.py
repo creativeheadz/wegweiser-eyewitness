@@ -83,7 +83,8 @@ def normalise_to_wav(data: bytes, work_dir: str) -> bytes:
     with open(src, "wb") as fh:
         fh.write(data)
     done = subprocess.run(
-        ["ffmpeg", "-y", "-nostdin", "-i", src, "-vn", "-ac", "1",
+        ["ffmpeg", "-y", "-nostdin", "-protocol_whitelist", "file",
+         "-i", src, "-vn", "-ac", "1",
          "-ar", "16000", "-c:a", "pcm_s16le", "-t", str(MAX_SECONDS),
          dst], capture_output=True, timeout=60)
     if done.returncode != 0 or not os.path.exists(dst):
@@ -114,11 +115,25 @@ def summarise_transcript(transcript: str, raw: dict) -> dict:
 
 def read_voice(data: bytes, mime: str | None = None, *, client=None,
                capture_id=None, intake_run_id=None) -> dict:
-    """Reader contract for one voice note."""
+    """Reader contract for one voice note. The work folder holds
+    copies of customer evidence, so it goes when the read ends."""
+    import shutil
     import tempfile
     if not data:
         return _retake("unreadable")
     work = tempfile.mkdtemp(prefix="eyewitness-voice-")
+    try:
+        return _read_voice(data, mime, work=work, client=client,
+                           capture_id=capture_id,
+                           intake_run_id=intake_run_id)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _read_voice(data: bytes, mime: str | None = None, *, work: str,
+                client=None, capture_id=None,
+                intake_run_id=None) -> dict:
+    """One voice note, read inside `work`."""
     try:
         wav_bytes = normalise_to_wav(data, work)
     except Exception:

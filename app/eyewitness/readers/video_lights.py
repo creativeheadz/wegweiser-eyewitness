@@ -317,7 +317,8 @@ def probe_video(path: str) -> dict:
     """Duration, size and frame rate from ffprobe (no network)."""
     import subprocess
     done = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+        ["ffprobe", "-v", "error", "-protocol_whitelist", "file",
+         "-select_streams", "v:0",
          "-show_entries",
          "format=duration:stream=width,height,avg_frame_rate",
          "-of", "json", path], capture_output=True, text=True,
@@ -347,7 +348,11 @@ def normalise_video(src_path: str, dst_path: str) -> dict:
     step. No audio is kept here; the beep reader reads the source.
     Returns the probe of the normalised file.
     """
-    _run_ffmpeg(["ffmpeg", "-y", "-nostdin", "-i", src_path,
+    # Only the local file protocol, and at most MAX_DURATION_S of the
+    # clip: the frames held in memory and the SAM frames billed both
+    # stay bounded, whatever length a file upload arrives with.
+    _run_ffmpeg(["ffmpeg", "-y", "-nostdin", "-protocol_whitelist", "file",
+                 "-i", src_path, "-t", str(MAX_DURATION_S),
                  "-vf", "fps=10,scale='min(1280,iw)':-2",
                  "-c:v", "libx264", "-pix_fmt", "yuv420p",
                  "-movflags", "+faststart", "-an", dst_path])
@@ -430,14 +435,29 @@ def _describe_keyframes(frames, client, capture_id, intake_run_id):
 
 def read_video(data: bytes, mime: str | None = None, *, client=None,
                capture_id=None, intake_run_id=None) -> dict:
-    """Reader contract for one power light clip.
+    """Reader contract for one power light clip. The work folder holds
+    copies of customer evidence, so it goes when the read ends."""
+    import shutil
+    import tempfile
+    work = tempfile.mkdtemp(prefix="eyewitness-video-")
+    try:
+        return _read_video(data, mime, work=work, client=client,
+                           capture_id=capture_id,
+                           intake_run_id=intake_run_id)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _read_video(data: bytes, mime: str | None = None, *, work: str,
+                client=None, capture_id=None,
+                intake_run_id=None) -> dict:
+    """One power light clip, read inside `work`.
 
     Normalise with ffmpeg, locate the light with SAM (three concepts
     at most) or with the code fallback, count in code on every frame,
     then decode with the Dell table. Beeps from the audio track join
     the reading when the clip carries them (S3).
     """
-    import tempfile
     if not data:
         return _retake("light_not_found")
     if client is None:
@@ -448,7 +468,6 @@ def read_video(data: bytes, mime: str | None = None, *, client=None,
             client = None
     live_client = client if (client is not None
                              and client.is_configured) else None
-    work = tempfile.mkdtemp(prefix="eyewitness-video-")
     src = os.path.join(work, "source.bin")
     norm = os.path.join(work, "normalised.mp4")
     with open(src, "wb") as fh:

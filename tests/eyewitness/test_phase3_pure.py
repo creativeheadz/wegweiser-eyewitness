@@ -216,3 +216,61 @@ def test_injection_flag_in_summary_and_customer_text_unchanged():
         "https://example.test/eyewitness/tok",
         int(time.time()) + 3600)
     assert "admin password" not in text
+
+
+# -- review fixes: media bounds, no network, no leftover evidence ------
+
+def test_every_media_call_is_local_only():
+    """Each ffmpeg or ffprobe argument list in the readers carries
+    -protocol_whitelist file, so no container can reach the network."""
+    import ast
+    missing = []
+    for path in sorted((ROOT / "app/eyewitness/readers").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.List) and node.elts
+                    and isinstance(node.elts[0], ast.Constant)
+                    and node.elts[0].value in ("ffmpeg", "ffprobe")):
+                continue
+            values = [e.value for e in node.elts
+                      if isinstance(e, ast.Constant)]
+            if "-protocol_whitelist" not in values:
+                missing.append(f"{path.name}:{node.lineno}")
+    assert not missing, ", ".join(missing)
+
+
+def test_normalised_clip_is_capped(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(video, "_run_ffmpeg",
+                        lambda args, timeout=90: seen.setdefault("args", args))
+    monkeypatch.setattr(video, "probe_video",
+                        lambda path: {"duration_s": 20.0})
+    video.normalise_video("in.bin", "out.mp4")
+    args = seen["args"]
+    assert float(args[args.index("-t") + 1]) == video.MAX_DURATION_S
+    assert args.index("-t") > args.index("-i")
+
+
+class _NoKey:
+    is_configured = False
+
+
+def test_readers_leave_no_evidence_behind(monkeypatch, tmp_path):
+    import tempfile
+    made = []
+
+    def mkdtemp(prefix=""):
+        path = tmp_path / f"{prefix}{len(made)}"
+        path.mkdir()
+        made.append(path)
+        return str(path)
+
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+    junk = b"not a media file" * 64
+    assert video.read_video(junk, "video/mp4",
+                            client=_NoKey())["verdict"] == "retake"
+    assert voice_mod.read_voice(junk, "audio/webm",
+                                client=_NoKey())["verdict"] == "retake"
+    assert beeps_mod.beeps_from_file(str(tmp_path / "missing.mp4")) is None
+    assert len(made) == 3
+    assert not any(p.exists() for p in made)

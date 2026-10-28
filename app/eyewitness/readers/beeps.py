@@ -11,6 +11,9 @@ import os
 
 _TABLE = None
 LONG_MIN_S = 0.45
+# The clip's audio is read for at most as long as the video reader
+# keeps of the picture (video_lights.MAX_DURATION_S).
+MAX_SECONDS = 20
 
 
 def beep_table() -> dict:
@@ -137,7 +140,8 @@ def beeps_from_file(path: str) -> dict | None:
     wav_path = os.path.join(work, "audio.wav")
     try:
         done = subprocess.run(
-            ["ffmpeg", "-y", "-nostdin", "-i", path, "-vn", "-ac", "1",
+            ["ffmpeg", "-y", "-nostdin", "-protocol_whitelist", "file",
+             "-i", path, "-t", str(MAX_SECONDS), "-vn", "-ac", "1",
              "-ar", "16000", "-c:a", "pcm_s16le", wav_path],
             capture_output=True, timeout=60)
         if done.returncode != 0 or not os.path.exists(wav_path):
@@ -145,3 +149,6 @@ def beeps_from_file(path: str) -> dict | None:
         return beeps_from_wav(wav_path)
     except Exception:
         return None
+    finally:
+        import shutil
+        shutil.rmtree(work, ignore_errors=True)
