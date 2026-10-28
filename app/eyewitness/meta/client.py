@@ -242,22 +242,49 @@ class MetaClient:
         """Upload one file for a Responses call. Returns the file id.
 
         Used when a video is too large for a data URL. The upload itself
-        is not billed; the SAM call that uses the file is.
+        is not billed; the SAM call that uses the file is. The file is
+        set to expire one hour after creation, and the caller deletes
+        it once the SAM calls end (see delete_file).
         """
         if not self.is_configured:
             raise MetaNotConfigured("not configured")
         import requests
+        # purpose and expires_after go before the file part, in that
+        # order, as the files endpoint expects.
+        files = [
+            ("purpose", (None, "user_data")),
+            ("expires_after", (None, json.dumps(
+                {"anchor": "created_at", "seconds": 3600}))),
+            ("file", (filename, data, "video/mp4")),
+        ]
         resp = requests.post(
             f"{BASE_URL}/files",
             headers={"Authorization": f"Bearer {self._key}"},
-            files={"file": (filename, data, "video/mp4")},
-            data={"purpose": "user_data"}, timeout=180)
+            files=files, timeout=180)
         if resp.status_code >= 400:
             raise RuntimeError(f"file upload returned {resp.status_code}")
         file_id = (resp.json() or {}).get("id")
         if not file_id:
             raise RuntimeError("file upload returned no id")
         return str(file_id)
+
+    def delete_file(self, file_id: str) -> bool:
+        """Delete one uploaded file. Best effort: never raises.
+
+        The upload returns ids in more than one shape (for example
+        file-123 and file_abc); the id is used as given.
+        """
+        if not file_id or not self.is_configured:
+            return False
+        try:
+            import requests
+            resp = requests.delete(
+                f"{BASE_URL}/files/{file_id}",
+                headers={"Authorization": f"Bearer {self._key}"},
+                timeout=30)
+            return resp.status_code < 400
+        except Exception:
+            return False
 
     def transcribe(self, wav_bytes: bytes, *, duration_s: float = 0.0,
                    keywords=None, intake_run_id=None,

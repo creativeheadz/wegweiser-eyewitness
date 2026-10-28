@@ -66,6 +66,19 @@ def customer_page(token):
     from app.models import Tenants
     tenant = db.session.get(Tenants, row.tenant_uuid)
     msp_name = getattr(tenant, "tenantname", None) or "Your IT support"
+    msp_logo_url = None
+    logo_path = getattr(tenant, "logo_path", None) if tenant else None
+    if logo_path:
+        logo_file = logo_path[7:] if logo_path.startswith("static/") else logo_path
+        logo_file = logo_file.lstrip("/")
+        try:
+            msp_logo_url = url_for("static", filename=logo_file)
+        except Exception:
+            msp_logo_url = None
+    try:
+        next_time_days = int(os.environ.get("EYEWITNESS_NEXT_TIME_DAYS", "7"))
+    except ValueError:
+        next_time_days = 7
     # Guide photos (S2) ride on their item as a token-scoped file URL.
     guides = {}
     for item in (row.items or []):
@@ -76,7 +89,8 @@ def customer_page(token):
                 capture_id=int(guide_id))
     return render_template("eyewitness/customer.html", row=row,
                            guides=guides,
-                           msp_name=msp_name, token=token)
+                           msp_name=msp_name, msp_logo_url=msp_logo_url,
+                           next_time_days=next_time_days, token=token)
 
 
 @eyewitness_bp.route("/eyewitness/<token>/upload", methods=["POST"])
@@ -367,7 +381,11 @@ def manual_request(ticket_id):
                                     token=token))
         expires = int(time.time()) + ew_requests.link_ttl_seconds(
             next_time=any(i.get("open_until") for i in items))
-        text = ew_requests.render_customer_text(items, link, expires)
+        from app.models import Tenants
+        tenant = db.session.get(Tenants, rec.tenant_uuid)
+        msp_name = getattr(tenant, "tenantname", None) or "Your IT support"
+        text = ew_requests.render_customer_text(items, link, expires,
+                                                msp_name=msp_name)
         hits = outgoing_filter(text, allowed_url=link)
         row = EvidenceRequest(
             tenant_uuid=rec.tenant_uuid, helpdesk_ticket_id=rec.id,
@@ -545,7 +563,11 @@ def make_guide_request(ticket_id):
                                  "the marked part.",
                   "max_seconds": None, "custom": True,
                   "open_until": None, "guide_capture_id": None}]
-        text = ew_requests.render_customer_text(items, link, expires)
+        from app.models import Tenants as _Tenants
+        _tenant = db.session.get(_Tenants, rec.tenant_uuid)
+        _msp = getattr(_tenant, "tenantname", None) or "Your IT support"
+        text = ew_requests.render_customer_text(items, link, expires,
+                                                msp_name=_msp)
         hits = outgoing_filter(text, allowed_url=link)
         row = EvidenceRequest(
             tenant_uuid=rec.tenant_uuid, helpdesk_ticket_id=rec.id,

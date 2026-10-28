@@ -49,6 +49,9 @@
     reader.readAsDataURL(file);
   }
 
+  var POLL_TIMEOUT_MS = 5 * 60 * 1000;
+  var POLL_TIMEOUT_MESSAGE = "Checking is taking longer than usual. Please try again.";
+
   function uploadAndPoll(itemId, blob, filename, status) {
     status.textContent = "Sending…";
     var fd = new FormData();
@@ -57,7 +60,13 @@
     post("/upload", { method: "POST", body: fd }).then(function (r) { return r.json(); })
       .then(function (body) {
         if (body.error) { status.textContent = body.error; return; }
+        var started = Date.now();
         var poll = setInterval(function () {
+          if (Date.now() - started >= POLL_TIMEOUT_MS) {
+            clearInterval(poll);
+            status.textContent = POLL_TIMEOUT_MESSAGE;
+            return;
+          }
           post("/capture/" + body.capture_id).then(function (r) { return r.json(); })
             .then(function (s) {
               if (s.status === "ok") { clearInterval(poll); status.textContent = "Got it, thank you."; }
@@ -286,9 +295,39 @@
   if (doneBtn) doneBtn.addEventListener("click", function () {
     post("/done", { method: "POST" }).then(function (r) { return r.json(); })
       .then(function (b) {
+        var main = document.querySelector("[data-next-time-days]");
+        var days = (main && main.getAttribute("data-next-time-days")) || "7";
         document.querySelector("[data-done-msg]").textContent = b.stays_open
-          ? "Thank you. We'll keep this open for 7 days. Come back to this link when it happens again."
+          ? "Thank you. We'll keep this open for " + days + " days. Come back to this link when it happens again."
           : "Thank you, that's everything. You can close this page.";
       });
   });
+
+  // One item at a time where script runs. The list stays as the
+  // fallback with script off, so nothing is hidden in the markup.
+  (function initStepper() {
+    var items = Array.prototype.slice.call(
+      document.querySelectorAll("[data-item-id]"));
+    if (items.length < 2) return;
+    var progress = document.querySelector("[data-progress]");
+    var nav = document.querySelector("[data-step-nav]");
+    if (!progress || !nav) return;
+    var backBtn = nav.querySelector("[data-nav-back]");
+    var nextBtn = nav.querySelector("[data-nav-next]");
+    var index = 0;
+    function show(i) {
+      index = Math.max(0, Math.min(items.length - 1, i));
+      items.forEach(function (li, n) { li.hidden = n !== index; });
+      progress.textContent = "Step " + (index + 1) + " of " + items.length;
+      progress.hidden = false;
+      nav.hidden = false;
+      if (backBtn) backBtn.disabled = index === 0;
+      if (nextBtn) nextBtn.disabled = index === items.length - 1;
+      var heading = items[index].querySelector("h2");
+      if (heading) heading.setAttribute("tabindex", "-1");
+    }
+    if (backBtn) backBtn.addEventListener("click", function () { show(index - 1); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { show(index + 1); });
+    show(0);
+  })();
 })();

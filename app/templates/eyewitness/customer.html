@@ -7,10 +7,16 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/eyewitness/customer.css') }}">
 </head>
 <body>
-<main class="ew">
+<main class="ew" data-next-time-days="{{ next_time_days }}">
+  {% if msp_logo_url %}<p class="ew-brand"><img class="ew-logo" src="{{ msp_logo_url }}" alt="{{ msp_name }}"></p>{% endif %}
   <p class="ew-msp">{{ msp_name }}</p>
   <h1>Help us fix this faster</h1>
   <p>Please work through the steps below. You can skip anything you can't do. Photos are checked as soon as they arrive, and we will tell you if one needs retaking. Your photos are only used for this ticket.</p>
+  <p class="ew-progress" data-progress aria-live="polite" hidden></p>
+  <nav class="ew-step-nav" data-step-nav hidden aria-label="Steps">
+    <button type="button" class="ew-btn ew-nav-btn" data-nav-back>Back</button>
+    <button type="button" class="ew-btn ew-nav-btn" data-nav-next>Next</button>
+  </nav>
 
   <ol class="ew-items">
   {% for item in row.items %}
@@ -68,7 +74,7 @@
       {% endif %}
       <button type="button" class="ew-skip" data-skip>I can't do this</button>
       <p class="ew-status" data-status role="status"></p>
-      {% if item.open_until %}<p class="ew-note">We'll keep this open for 7 days. Come back to this link when it happens again.</p>{% endif %}
+      {% if item.open_until %}<p class="ew-note">We'll keep this open for {{ next_time_days }} days. Come back to this link when it happens again.</p>{% endif %}
     </li>
   {% endfor %}
   </ol>

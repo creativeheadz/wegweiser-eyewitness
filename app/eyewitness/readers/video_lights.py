@@ -614,6 +614,17 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
                                          intake_run_id)
         except Exception:
             media_part = None
+    sam_file_id = (media_part or {}).get("file_id") if media_part else None
+
+    def _cleanup_sam_file():
+        if sam_file_id and live_client is not None:
+            try:
+                deleter = getattr(live_client, "delete_file", None)
+                if deleter is not None:
+                    deleter(sam_file_id)
+            except Exception:
+                pass
+
     if media_part is not None:
         from app.eyewitness.meta.sam_parser import union_box
         for concept in CONCEPTS:
@@ -653,6 +664,7 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
     if region is None:
         located = code_then_point()
         if located is None:
+            _cleanup_sam_file()
             return _retake("light_not_found",
                            {"duration_s": norm_probe["duration_s"],
                             "stats": stats, "locator": "code",
@@ -668,6 +680,9 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
             region, locator, concept_used, sam_frames = located
             series = measure_region_series(frames, region)
             events = flashes_from_series(series, fps)
+    # The SAM calls have ended. An uploaded file is deleted here, best
+    # effort, so it does not sit on the files endpoint.
+    _cleanup_sam_file()
     if len(events) < 2:
         return _retake("light_not_found",
                        {"duration_s": norm_probe["duration_s"],
