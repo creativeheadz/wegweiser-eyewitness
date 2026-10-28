@@ -48,6 +48,9 @@
       heading.focus();
     }
   }
+  // "Got it" stays in view for a moment before the next step shows, so
+  // the customer sees each item accepted.
+  var ADVANCE_DELAY_MS = 1500;
   function markDoneAndAdvance(li) {
     if (li) li.setAttribute("data-done", "true");
     if (!stepperReady || !itemEls.length) return;
@@ -55,7 +58,11 @@
     if (!anyUnfinished) return;
     var idx = li ? itemEls.indexOf(li) : currentStep;
     if (idx < 0) idx = currentStep;
-    showStep(firstUnfinishedFrom(idx + 1));
+    setTimeout(function () {
+      // The customer may have moved to another step by hand meanwhile.
+      if (currentStep !== idx) return;
+      showStep(firstUnfinishedFrom(idx + 1));
+    }, ADVANCE_DELAY_MS);
   }
 
   // Numbers held with the server readers under one test:

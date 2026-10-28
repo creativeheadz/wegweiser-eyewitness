@@ -277,3 +277,31 @@ def test_stepper_advances_focuses_and_resumes():
     routes = (ROOT / "app/eyewitness/routes.py").read_text(encoding="utf-8")
     assert "item_done_states" in routes
     assert "item_states=item_states" in routes
+
+
+def test_recorder_clip_without_a_header_duration_is_not_too_short(monkeypatch):
+    """Chrome's recorder writes WebM with no duration; the reader must not
+    call that too short before normalisation measures it."""
+    from app.eyewitness.readers import video_lights as video
+
+    class NoKey:
+        is_configured = False
+
+    monkeypatch.setattr(video, "probe_video",
+                        lambda path: {"duration_s": 0.0, "width": 640,
+                                      "height": 480, "fps": 30.0})
+    monkeypatch.setattr(video, "normalise_video",
+                        lambda src, dst: {"duration_s": 12.0})
+    monkeypatch.setattr(video, "decode_frames", lambda path: ([], 10.0))
+    out = video.read_video(b"webm-bytes", "video/webm", client=NoKey())
+    assert out["retake"]["reason"] != "too_short"
+
+
+def test_accepted_items_stay_in_view_before_the_next_step():
+    js = (ROOT / "app/static/js/eyewitness/capture.js").read_text(
+        encoding="utf-8")
+    delay = re.search(r"ADVANCE_DELAY_MS = (\d+)", js)
+    assert delay and int(delay.group(1)) >= 1000
+    body = js[js.index("function markDoneAndAdvance"):]
+    body = body[:body.index("\n  }\n")]
+    assert "setTimeout" in body

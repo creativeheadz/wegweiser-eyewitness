@@ -577,7 +577,10 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
         probe = probe_video(src)
     except Exception:
         return _retake("light_not_found")
-    if probe["duration_s"] < MIN_DURATION_S:
+    # A clip filmed through Chrome's recorder carries no duration in its
+    # header, so an unknown length (0) goes on to normalisation, which
+    # writes a real one; video_quality then checks the normalised clip.
+    if 0 < probe["duration_s"] < MIN_DURATION_S:
         return _retake("too_short",
                        {"duration_s": probe["duration_s"],
                         "prompt_version": PROMPT_VERSION})
