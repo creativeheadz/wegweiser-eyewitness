@@ -12,7 +12,7 @@ Run overrides applied: commit, never push; no SSH to any host; total Meta spend 
 
 ## Evaluation results
 
-Golden set: one capture from a physical machine. Synthetic set: eight files made on this machine. Wording for the table comes from the run that wrote `eyewitness/docs/eval.md`.
+Golden set: one capture, the Windows 11 crash screen from a demo virtual machine. Synthetic set: eight files made on this machine. Wording for the table comes from the run that wrote `eyewitness/docs/eval.md`.
 
 | Set | Reader | Items | Passed | Cost on that run |
 |---|---|---|---|---|

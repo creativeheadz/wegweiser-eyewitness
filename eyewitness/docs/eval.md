@@ -1,10 +1,10 @@
 # Eyewitness reader evaluation
 
-Date: 2026-10-28. The golden set holds captures from physical machines. The synthetic set holds files made on this machine. The two sets stay apart in every table below.
+Date: 2026-10-28. The golden set holds real captures: screens and devices photographed or recorded from machines, physical or virtual. The synthetic set holds files made on this machine. The two sets stay apart in every table below.
 
 Folders come from EYEWITNESS_GOLDEN_DIR and EYEWITNESS_SYNTHETIC_DIR. Paths stay out of this file, which is published.
 
-## Golden set (captures from physical machines)
+## Golden set (real captures)
 
 | Reader | Items | Passed | Cost |
 |---|---|---|---|

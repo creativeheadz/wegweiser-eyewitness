@@ -300,10 +300,12 @@ def render_report(result: dict, golden_dir: str, synthetic_dir: str) -> str:
     lines = []
     lines.append("# Eyewitness reader evaluation")
     lines.append("")
-    lines.append("Date: 2026-10-28. The golden set holds captures from "
-                 "physical machines. The synthetic set holds files made "
-                 "on this machine. The two sets stay apart in every "
-                 "table below.")
+    import datetime
+    lines.append(f"Date: {datetime.date.today().isoformat()}. The golden "
+                 "set holds real captures: screens and devices "
+                 "photographed or recorded from machines, physical or "
+                 "virtual. The synthetic set holds files made on this "
+                 "machine. The two sets stay apart in every table below.")
     lines.append("")
     lines.append("Folders come from EYEWITNESS_GOLDEN_DIR and "
                  "EYEWITNESS_SYNTHETIC_DIR. Paths stay out of this "
@@ -315,7 +317,7 @@ def render_report(result: dict, golden_dir: str, synthetic_dir: str) -> str:
                      "results. Set EYEWITNESS_META_API_KEY and run the "
                      "tool again for live readings.")
         lines.append("")
-    lines.append("## Golden set (captures from physical machines)")
+    lines.append("## Golden set (real captures)")
     lines.append("")
     if golden:
         lines.append(_reader_table(golden))
