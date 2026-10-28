@@ -1,0 +1,124 @@
+{
+  "spark-screen": {
+    "ok": true,
+    "ms": 2863,
+    "usd": 0.00325,
+    "usage": {
+      "kind": "spark",
+      "model": "muse-spark-1.3",
+      "input_tokens": 1664,
+      "cached_tokens": 0,
+      "output_tokens": 276,
+      "units": 0,
+      "usd": 0.0032530000000000002,
+      "cache_hit": false,
+      "ms": 2394,
+      "intake_run_id": null,
+      "capture_id": null
+    },
+    "reading": {
+      "instruction_like_text": false,
+      "kind": "bsod",
+      "legible": true,
+      "screen_found": true,
+      "stop_code": "MEMORY_MANAGEMENT (0x1A)",
+      "text_lines": [
+        ":(",
+        "Your PC ran into a problem and needs to restart",
+        "Stop code: MEMORY_MANAGEMENT (0x1A)"
+      ]
+    }
+  },
+  "spark-intake": {
+    "ok": true,
+    "usd": 0.00265,
+    "usage": {
+      "kind": "intake",
+      "model": "muse-spark-1.3",
+      "input_tokens": 209,
+      "cached_tokens": 0,
+      "output_tokens": 561,
+      "units": 0,
+      "usd": 0.0026455000000000003,
+      "cache_hit": false,
+      "ms": 3201,
+      "intake_run_id": null,
+      "capture_id": null
+    },
+    "output": {
+      "items": [
+        {
+          "template": "screen_photo"
+        },
+        {
+          "template": "power_light_video"
+        },
+        {
+          "template": "sticker"
+        }
+      ],
+      "missing": [
+        "device model and identifier",
+        "blue screen error code/message",
+        "blink pattern and timing",
+        "current power-on behavior"
+      ],
+      "needs_evidence": true,
+      "physical_symptom": "PC keeps crashing with blue screen, now it just blinks",
+      "questions": [
+        {
+          "template": "since_when"
+        },
+        {
+          "template": "how_often"
+        }
+      ],
+      "reason_for_technician": "Blue-screen crash that progressed to blink/no-boot needs visual evidence of screen error, power-light blink behavior, and device identification to diagnose hardware vs OS failure."
+    }
+  },
+  "sam-image": {
+    "ok": true,
+    "usd": 0.01,
+    "objects": [
+      {
+        "id": 0,
+        "box": {
+          "x1": 969,
+          "y1": 639,
+          "x2": 1150,
+          "y2": 819,
+          "w": 1280,
+          "h": 960
+        },
+        "mask": {
+          "x": 0,
+          "y": 0,
+          "data": "181,182,!!!!!cBoRQbN3eptv9s&-:'h2V2b/n$YN-LS-Yjgip4W[k9_GnnAQhNh0&mWi(pH8=tWsOkKE{(8.$c(M",
+          "lossless": false
+        }
+      }
+    ],
+    "raw_excerpt": "event: response.created\ndata: {\"response\":{\"background\":false,\"created_at\":1793178178.0,\"error\":null,\"id\":\"resp_6ae1ba424e5c602801ee4691\",\"incomplete_details\":null,\"instructions\":null,\"metadata\":{\"mask_encoding\":\"one_bit\"},\"model\":\"sam-3.1\",\"object\":\"response\",\"output\":[],\"parallel_tool_calls\":true,\"service_tier\":\"auto\",\"status\":\"in_progress\",\"store\":true,\"temperature\":1.0,\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\"},\"sequence_number\":0,\"type\":\"response.created\"}\n\nevent: response.in_progress\ndata: {\"response\":{\"background\":false,\"created_at\":1793178178."
+  },
+  "sam-video": {
+    "ok": true,
+    "usd": 0.01,
+    "objects_first": [],
+    "raw_excerpt": "event: response.created\ndata: {\"response\":{\"background\":false,\"created_at\":1793178179.0,\"error\":null,\"id\":\"resp_6ae1ba4391821d7f03094138\",\"incomplete_details\":null,\"instructions\":null,\"metadata\":{\"mask_encoding\":\"one_bit\"},\"model\":\"sam-3.1\",\"object\":\"response\",\"output\":[],\"parallel_tool_calls\":true,\"service_tier\":\"auto\",\"status\":\"in_progress\",\"store\":true,\"temperature\":1.0,\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\"},\"sequence_number\":0,\"type\":\"response.created\"}\n\nevent: response.in_progress\ndata: {\"response\":{\"background\":false,\"created_at\":1793178179."
+  },
+  "voice": {
+    "skipped": "no local TTS (espeak absent); synthetic speech unavailable"
+  },
+  "image": {
+    "ok": true,
+    "usd": 0.01,
+    "created": 1793178199,
+    "has_data": true
+  },
+  "search": {
+    "skipped": "no confirmed grounding parameter; not spent in Phase 1"
+  },
+  "_total_usd_estimated": 0.0384,
+  "_budget_guard_usd": 0.8,
+  "_note": "sam-image objects re-parsed offline from one extra $0.0025 SAM call captured to learn the SSE format; total includes it."
+}
