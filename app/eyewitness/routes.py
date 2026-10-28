@@ -297,8 +297,11 @@ def manual_request(ticket_id):
         # The outgoing filter below still applies to every customer-bound text.
         approval = False
         token = ew_requests.new_token()
-        link = url_for("eyewitness_bp.customer_page", token=token,
-                       _external=True)
+        # Wegweiser's rule: links come from APP_BASE_URL, never from the
+        # Host header of the request.
+        from app.utilities.absolute_url import absolute_url
+        link = absolute_url(url_for("eyewitness_bp.customer_page",
+                                    token=token))
         expires = int(time.time()) + ew_requests.link_ttl_seconds(
             next_time=any(i.get("open_until") for i in items))
         text = ew_requests.render_customer_text(items, link, expires)
