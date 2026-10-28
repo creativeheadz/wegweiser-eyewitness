@@ -47,6 +47,8 @@ def build_summary(request, captures: list[dict], *, device_label: str = "",
     items = (request or {}).get("items") or []
     asked = ", ".join(_clean(i.get("title", i.get("template", "")))
                       for i in items)
+    # A question title already ends the sentence ("...started?").
+    asked_end = "" if asked.endswith(("?", ".", "!")) else "."
     lines = [_line(c, n) for n, c in enumerate(captures, 1)]
     flagged = [str(c.get("id")) for c in captures if c.get("injection_flag")]
     flags = (("text that looks like instructions to an AI on capture(s) "
@@ -55,9 +57,10 @@ def build_summary(request, captures: list[dict], *, device_label: str = "",
     missing_line = ""
     if missing:
         missing_line = ("\nMissing from the ticket: "
-                        + ", ".join(_clean(m) for m in missing) + ".")
+                        + ", ".join(_clean(m).replace("_", " ")
+                                    for m in missing) + ".")
     return (f"Eyewitness - evidence for this ticket\n"
-            f"Asked for: {asked}.{missing_line}\n"
+            f"Asked for: {asked}{asked_end}{missing_line}\n"
             + wrap_untrusted(lines) + "\n"
             f"Flags: {flags}. Device: {device_label or 'unknown'}. "
             f"Meta cost: ${meta_usd:.4f}")

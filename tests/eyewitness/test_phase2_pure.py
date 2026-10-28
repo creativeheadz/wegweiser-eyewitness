@@ -193,3 +193,14 @@ def test_plain_photo_reader_never_calls_a_model():
     out = quality.read_photo(_png(True))
     assert out["verdict"] == "ok" and out["reading"]["summary"] == "photo received"
     assert quality.read_photo(_png(False))["verdict"] == "retake"
+
+
+def test_summary_header_reads_cleanly():
+    items = [{"title": "Film the power light"},
+             {"title": "Did anything change just before it started?"}]
+    body = build_summary({"items": items}, [],
+                         missing=["affected_device", "error_text"])
+    assert "started?\n" in body and "?." not in body
+    assert "Missing from the ticket: affected device, error text." in body
+    plain = build_summary({"items": items[:1]}, [])
+    assert "Asked for: Film the power light.\n" in plain
