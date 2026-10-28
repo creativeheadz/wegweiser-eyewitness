@@ -15,15 +15,33 @@ logger = logging.getLogger(__name__)
 SCREEN_TEMPLATES = frozenset({"screen_photo", "screen_photo_next_time",
                               "printer_panel"})
 
+# Every item template routes to its reader by name. A template with
+# no entry here falls back to its capture kind, and the test holds
+# the table against the template catalogue so a new template cannot
+# drift to the wrong reader.
+TEMPLATE_READERS = {
+    "screen_photo": "screen",
+    "screen_photo_next_time": "screen",
+    "printer_panel": "screen",
+    "sticker": "sticker",
+    "whole_device": "photo",
+    "cables_back": "photo",
+    "custom": "photo",
+    "power_light_video": "video",
+    "voice_note": "voice",
+}
+
 
 def reader_for(template: str | None, kind: str | None) -> str:
     """sticker, screen, photo, voice or video for one capture."""
-    if template == "sticker":
-        return "sticker"
+    if template in TEMPLATE_READERS:
+        return TEMPLATE_READERS[template]
     if kind == "photo":
-        return "screen" if template in SCREEN_TEMPLATES else "photo"
+        return "photo"
     if kind == "voice":
         return "voice"
+    if kind == "video":
+        return "video"
     return "video"
 
 
@@ -75,16 +93,19 @@ def process_capture(capture_id: int) -> dict:
             result = read_photo(data)
         elif reader == "voice":
             from app.eyewitness.readers.voice import read_voice
-            result = read_voice(data, cap.mime)
-        else:  # video reading lands in Phase 3; hold the capture as read
-            result = {"verdict": "ok", "retake": None,
-                      "reading": {"stub": True,
-                                  "summary": "video received"},
-                      "injection_flag": False}
+            result = read_voice(data, cap.mime, capture_id=cap.id,
+                                intake_run_id=(req.intake_run_id
+                                               if req else None))
+        else:
+            from app.eyewitness.readers.video_lights import read_video
+            result = read_video(data, cap.mime, capture_id=cap.id,
+                                intake_run_id=(req.intake_run_id
+                                               if req else None))
         cap.reading = result.get("reading")
         cap.retake = result.get("retake")
         cap.injection_flag = bool(result.get("injection_flag"))
         reading = result.get("reading") or {}
+        cap.quality = reading.get("quality") or reading.get("stats")
         cap.prompt_version = reading.get("prompt_version")
         cap.status = "ok" if result.get("verdict") == "ok" else "retake"
     except Exception as exc:  # one capture never kills the queue
@@ -130,5 +151,5 @@ def expire_requests():
 
 @celery.task(name="app.eyewitness.retention_sweep")
 def retention_sweep():
-    # Phase 3: delete captures past EYEWITNESS_RETENTION_DAYS.
-    return {"phase": 3}
+    from app.eyewitness.retention import sweep_purge
+    return sweep_purge()

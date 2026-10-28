@@ -179,12 +179,15 @@ class MetaClient:
         return parsed
 
     def sam_segment(self, *, concept: str, media_part: dict,
-                    intake_run_id=None, capture_id=None) -> str:
+                    intake_run_id=None, capture_id=None,
+                    frame_count: int = 0) -> str:
         """One SAM 3.1 concept on one image or video. Returns raw text.
 
         `media_part` is an OpenAI Responses content part (input_image /
         input_video). Streamed; the concatenated text is what
-        sam_parser.parse_sam_text consumes.
+        sam_parser.parse_sam_text consumes. Video billing is per frame
+        with a 50 frame floor, so the caller passes the frame count of
+        the normalised clip when it knows it.
         """
         if not self.is_configured:
             raise MetaNotConfigured("not configured")
@@ -197,25 +200,174 @@ class MetaClient:
         self._check_cap(estimate=0.02)
         import requests
         started = time.time()
-        resp = requests.post(
-            f"{BASE_URL}/responses",
-            headers={"Authorization": f"Bearer {self._key}",
-                     "Content-Type": "application/json"},
-            json={"model": "sam-3.1", "stream": True,
-                  "input": [{"role": "user", "content": [
-                      {"type": "input_text", "text": concept}, media_part]}],
-                  "metadata": {"mask_encoding": "one_bit"}},
-            timeout=180, stream=True)
+        last_exc = None
+        resp = None
+        for attempt in (1, 2):
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}/responses",
+                    headers={"Authorization": f"Bearer {self._key}",
+                             "Content-Type": "application/json"},
+                    json={"model": "sam-3.1", "stream": True,
+                          "input": [{"role": "user", "content": [
+                              {"type": "input_text", "text": concept},
+                              media_part]}],
+                          "metadata": {"mask_encoding": "one_bit",
+                                       "include_confidence": "true"}},
+                    timeout=180, stream=True)
+                if resp.status_code == 429 or resp.status_code >= 500:
+                    raise RuntimeError(f"SAM returned {resp.status_code}")
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 2:
+                    raise
+                time.sleep(1.0)
+        if resp is None:  # pragma: no cover
+            raise last_exc
         if resp.status_code >= 400:
             raise RuntimeError(f"SAM returned {resp.status_code}")
         text = resp.text
         ms = int((time.time() - started) * 1000)
-        frames = 0
+        frames = int(frame_count or 0)
         self._store(key, text)
         self._record("sam", "sam-3.1", {}, frames,
-                     prices.sam_usd(frames=frames or SAM_MIN_FRAMES_FALLBACK),
+                     prices.sam_usd(frames=frames
+                                      or SAM_MIN_FRAMES_FALLBACK),
                      False, ms, intake_run_id, capture_id)
         return text
+
+    def upload_file(self, data: bytes, filename: str = "clip.mp4",
+                    *, intake_run_id=None, capture_id=None) -> str:
+        """Upload one file for a Responses call. Returns the file id.
+
+        Used when a video is too large for a data URL. The upload itself
+        is not billed; the SAM call that uses the file is.
+        """
+        if not self.is_configured:
+            raise MetaNotConfigured("not configured")
+        import requests
+        resp = requests.post(
+            f"{BASE_URL}/files",
+            headers={"Authorization": f"Bearer {self._key}"},
+            files={"file": (filename, data, "video/mp4")},
+            data={"purpose": "user_data"}, timeout=180)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"file upload returned {resp.status_code}")
+        file_id = (resp.json() or {}).get("id")
+        if not file_id:
+            raise RuntimeError("file upload returned no id")
+        return str(file_id)
+
+    def transcribe(self, wav_bytes: bytes, *, duration_s: float = 0.0,
+                   keywords=None, intake_run_id=None,
+                   capture_id=None) -> dict:
+        """One batch Voice Transcribe call. Returns the parsed body.
+
+        The endpoint takes multipart form data: a JSON `request` part
+        and a mono WAV `audio` part at 16 kHz or 24 kHz. There is no
+        detected language field in the response; the Spark summary
+        step names the language. A 400 means the WAV was refused.
+        """
+        if not self.is_configured:
+            raise MetaNotConfigured("not configured")
+        import hashlib
+        digest = hashlib.sha256(wav_bytes or b"").hexdigest()
+        req_obj = {"model": "muse-voice-transcribe-1.0",
+                   "audioEncoding": "WAV", "mode": "PUSH_TO_TALK"}
+        if keywords:
+            req_obj["keywords"] = list(keywords)[:20]
+        key = cache_key("voice", {"digest": digest, "request": req_obj})
+        hit = self._cached(key)
+        if hit is not None:
+            self._record("voice", "muse-voice-transcribe-1.0", {}, 0,
+                         0.0, True, 0, intake_run_id, capture_id)
+            return hit if isinstance(hit, dict) else json.loads(hit)
+        self._check_cap(estimate=prices.voice_usd(duration_s or 60))
+        import requests
+        started = time.time()
+        last_exc = None
+        parsed = None
+        for attempt in (1, 2):
+            try:
+                resp = requests.post(
+                    f"{BASE_URL}/asr/transcribe",
+                    headers={"Authorization": f"Bearer {self._key}",
+                             "Accept": "application/json"},
+                    files={
+                        "request": (None, json.dumps(req_obj),
+                                    "application/json"),
+                        "audio": ("voice.wav", wav_bytes, "audio/wav")},
+                    timeout=180)
+                if resp.status_code == 400:
+                    raise ValueError("voice endpoint refused the WAV")
+                if resp.status_code == 429 or resp.status_code >= 500:
+                    raise RuntimeError(
+                        f"voice returned {resp.status_code}")
+                if resp.status_code >= 400:
+                    raise RuntimeError(
+                        f"voice returned {resp.status_code}")
+                parsed = resp.json()
+                break
+            except ValueError:
+                raise
+            except Exception as exc:
+                last_exc = exc
+                if attempt == 2:
+                    raise
+                time.sleep(1.0)
+        if parsed is None:  # pragma: no cover
+            raise last_exc
+        ms = int((time.time() - started) * 1000)
+        seconds = duration_s
+        try:
+            seconds = float(parsed.get("audioDurationMs") or 0) / 1000.0 \
+                or seconds
+        except (TypeError, ValueError):
+            pass
+        units = int(round(seconds))
+        self._store(key, parsed)
+        self._record("voice", "muse-voice-transcribe-1.0", {}, units,
+                     prices.voice_usd(seconds), False, ms,
+                     intake_run_id, capture_id)
+        return parsed
+
+    def image_edit(self, image_bytes: bytes, prompt: str, *,
+                   intake_run_id=None, capture_id=None) -> bytes:
+        """One Muse Image edit on a customer photo. Returns image bytes.
+
+        Technician triggered only (S2). The result never goes to a
+        customer on its own; it joins a new request that waits for
+        approval. Raises when the endpoint refuses the edit so the
+        caller can fall back to a local annotation.
+        """
+        if not self.is_configured:
+            raise MetaNotConfigured("not configured")
+        self._check_cap(estimate=prices.image_usd(1))
+        import base64
+        import io as _io
+        from openai import OpenAI
+        client = OpenAI(api_key=self._key, base_url=BASE_URL)
+        started = time.time()
+        bio = _io.BytesIO(image_bytes)
+        bio.name = "photo.jpg"
+        resp = client.images.edit(model="muse-image-1.0", image=bio,
+                                  prompt=prompt, n=1, size="1024x1024")
+        ms = int((time.time() - started) * 1000)
+        self._record("image", "muse-image-1.0", {}, 1,
+                     prices.image_usd(1), False, ms,
+                     intake_run_id, capture_id)
+        data = (resp.data or [None])[0]
+        b64 = getattr(data, "b64_json", None) if data else None
+        if b64:
+            return base64.b64decode(b64)
+        url = getattr(data, "url", None) if data else None
+        if url:
+            import requests
+            got = requests.get(url, timeout=60)
+            got.raise_for_status()
+            return got.content
+        raise RuntimeError("image edit returned no image")
 
 
 SAM_MIN_FRAMES_FALLBACK = 50

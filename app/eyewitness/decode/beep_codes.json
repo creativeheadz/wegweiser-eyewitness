@@ -1,0 +1,22 @@
+{
+  "vendor": "mixed",
+  "note": "Beep patterns heard at power-on. Counts vary by BIOS maker and board generation, so a match is a pointer for the technician. Verify against the service manual for the exact model before acting.",
+  "sources": [
+    "AMI BIOS beep codes (American Megatrends BIOS documentation, POST beep code table)",
+    "Dell desktop beep codes (support.dell.com, diagnostic beep code reference for OptiPlex and XPS)",
+    "IBM PC POST beep codes (IBM technical reference, power-on self test tones)"
+  ],
+  "patterns": {
+    "short:1": "AMI: DRAM refresh failure. Dell legacy: no memory detected in some generations.",
+    "short:2": "AMI: parity circuit failure. Dell legacy: possible memory issue in some generations.",
+    "short:3": "AMI: base 64 KB memory failure.",
+    "short:4": "AMI: system timer failure.",
+    "short:5": "AMI: processor failure.",
+    "short:6": "AMI: keyboard controller failure.",
+    "short:7": "AMI: virtual mode exception error.",
+    "short:8": "AMI: display memory read or write failure.",
+    "long:1 short:2": "Common video adapter pattern on several BIOS makers: check the display path and reseat the graphics card where one is fitted.",
+    "long:1 short:3": "Common video or memory pattern on several BIOS makers: check seating of memory and any graphics card.",
+    "continuous": "Repeated or continuous tone: power, overheating or a stuck key on several BIOS makers. Check cooling and the keyboard first."
+  }
+}

@@ -428,20 +428,56 @@ def _captures_as_dicts(req_row) -> list[dict]:
     return out
 
 
+def sum_call_rows(rows, run_ids, capture_ids) -> float:
+    """Sum call rows for one run and its captures. Pure; the panel
+    test holds the ticket view figure against this sum."""
+    runs = {int(r) for r in (run_ids or []) if r is not None}
+    caps = {int(c) for c in (capture_ids or []) if c is not None}
+    total = 0.0
+    for row in rows or []:
+        if isinstance(row, dict):
+            usd, run_id, cap_id = (row.get("usd"),
+                                   row.get("intake_run_id"),
+                                   row.get("capture_id"))
+        else:
+            usd = getattr(row, "usd", 0)
+            run_id = getattr(row, "intake_run_id", None)
+            cap_id = getattr(row, "capture_id", None)
+        if (run_id is not None and int(run_id) in runs) or \
+                (cap_id is not None and int(cap_id) in caps):
+            total += float(usd or 0)
+    return total
+
+
 def _ticket_meta_usd(run, req_row) -> float:
-    from app.models import db
     from app.eyewitness.models import Capture, MetaCall
-    total = (db.session.query(
-        db.func.coalesce(db.func.sum(MetaCall.usd), 0))
-        .filter(MetaCall.intake_run_id == run.id).scalar() or 0)
+    cap_ids = []
     if req_row is not None:
         cap_ids = [c.id for c in Capture.query.filter_by(
             request_id=req_row.id).all()]
-        if cap_ids:
-            total += (db.session.query(
-                db.func.coalesce(db.func.sum(MetaCall.usd), 0))
-                .filter(MetaCall.capture_id.in_(cap_ids)).scalar() or 0)
-    return float(total or 0)
+    rows = MetaCall.query.filter(
+        (MetaCall.intake_run_id == run.id)
+        | (MetaCall.capture_id.in_(cap_ids or [-1]))).all()
+    return sum_call_rows(rows, [run.id], cap_ids)
+
+
+def ticket_meta_usd(req_rows) -> float:
+    """Ticket view figure: every MetaCall for the requests, their
+    runs and their captures. Matches the call log by construction."""
+    from app.eyewitness.models import Capture, MetaCall
+    req_rows = list(req_rows or [])
+    if not req_rows:
+        return 0.0
+    req_ids = [r.id for r in req_rows]
+    run_ids = [r.intake_run_id for r in req_rows if r.intake_run_id]
+    cap_ids = [c.id for c in Capture.query.filter(
+        Capture.request_id.in_(req_ids)).all()]
+    if not run_ids and not cap_ids:
+        return 0.0
+    rows = MetaCall.query.filter(
+        (MetaCall.intake_run_id.in_(run_ids or [-1]))
+        | (MetaCall.capture_id.in_(cap_ids or [-1]))).all()
+    return sum_call_rows(rows, run_ids, cap_ids)
 
 
 def release_run(run_id) -> bool:
