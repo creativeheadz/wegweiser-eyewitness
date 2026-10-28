@@ -55,14 +55,14 @@ scenes:
   - number: 8
     start: "1:52"
     duration: 14
-    visual: "overlays/scene08.png"
+    visual: "overlays/scene08.mp4"
     voiceover: "voice/scene08.wav"
     caption: "Muse Spark reads the small line at the bottom of the screen: memory management. Her voice note, recorded in German, arrives as an English summary."
     badge: "NEW"
   - number: 9
     start: "2:06"
     duration: 18
-    visual: "overlays/scene09.png"
+    visual: "overlays/scene09.mp4"
     voiceover: "voice/scene09.wav"
     caption: "Anyone can write anything on a sticky note, so Eyewitness treats customer evidence as data only. The AI can't write to the customer at all. It can only pick from fixed requests that a technician controls."
     badge: "NEW"
