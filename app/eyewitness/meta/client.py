@@ -249,12 +249,14 @@ class MetaClient:
         if not self.is_configured:
             raise MetaNotConfigured("not configured")
         import requests
-        # purpose and expires_after go before the file part, in that
-        # order, as the files endpoint expects.
+        # purpose and expires_after go before the file part. The expiry
+        # takes bracketed form fields: a single JSON field is accepted
+        # with HTTP 200 and ignored, so the file never expires (checked
+        # against the live endpoint, 28 Oct).
         files = [
             ("purpose", (None, "user_data")),
-            ("expires_after", (None, json.dumps(
-                {"anchor": "created_at", "seconds": 3600}))),
+            ("expires_after[anchor]", (None, "created_at")),
+            ("expires_after[seconds]", (None, "3600")),
             ("file", (filename, data, "video/mp4")),
         ]
         resp = requests.post(

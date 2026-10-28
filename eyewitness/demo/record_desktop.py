@@ -30,11 +30,14 @@ def _auth_path(demo_dir: Path, site: str) -> Path:
 def do_login(site: str, url: str, demo_dir: Path) -> int:
     from playwright.sync_api import sync_playwright
     target = _auth_path(demo_dir, site)
+    # The saved state is a signed-in session, so its folder is private
+    # before anything is written into it.
     target.parent.mkdir(parents=True, exist_ok=True)
+    target.parent.chmod(0o700)
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
             executable_path="/usr/bin/google-chrome",
-            args=["--no-sandbox"], headless=False)
+            headless=False)
         context = browser.new_context(
             viewport={"width": 1440, "height": 900})
         page = context.new_page()
@@ -72,7 +75,7 @@ def do_record(site: str, scene: int, base_url: str, ticket: str,
     with sync_playwright() as pw:
         browser = pw.chromium.launch(
             executable_path="/usr/bin/google-chrome",
-            args=["--no-sandbox"], headless=True)
+            headless=True)
         context = browser.new_context(
             viewport={"width": 1920, "height": 1080},
             storage_state=str(auth),

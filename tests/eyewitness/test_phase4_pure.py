@@ -3,7 +3,6 @@
 No database and no paid calls. The SAM file tests use a fake HTTP
 layer in place of requests.
 """
-import json
 import re
 from pathlib import Path
 
@@ -48,11 +47,13 @@ def test_upload_sends_expires_after_before_file(monkeypatch):
     assert file_id == "file-123"
     assert seen["url"].endswith("/files")
     names = [name for name, _value in seen["files"]]
-    assert names == ["purpose", "expires_after", "file"]
-    purpose = dict(seen["files"])["purpose"][1]
-    expires = dict(seen["files"])["expires_after"][1]
-    assert purpose == "user_data"
-    assert json.loads(expires) == {"anchor": "created_at", "seconds": 3600}
+    assert names == ["purpose", "expires_after[anchor]",
+                     "expires_after[seconds]", "file"]
+    fields = dict(seen["files"])
+    assert fields["purpose"][1] == "user_data"
+    # Bracketed fields: the endpoint ignores a single JSON field.
+    assert fields["expires_after[anchor]"][1] == "created_at"
+    assert fields["expires_after[seconds]"][1] == "3600"
 
 
 def test_upload_handles_underscore_id_and_delete(monkeypatch):
