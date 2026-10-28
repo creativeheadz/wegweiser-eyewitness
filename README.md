@@ -94,14 +94,14 @@ Eyewitness uses four Meta models, each for one job. A capture only reaches a pai
 | Model | What it does in Eyewitness | Why this model | Phase 1 measurements (synthetic inputs) |
 |---|---|---|---|
 | **Muse Spark** (`muse-spark-1.3`) | Intake agent; reads screens, stickers and voice-note transcripts | It decides what a ticket is missing and turns untidy photos into strict structured fields, so the rest of the pipeline never has to parse prose. | Screen read: **$0.0033** (1,664 tokens in, 276 out), with the stop code `MEMORY_MANAGEMENT (0x1A)` read correctly. Intake decision: **$0.0027**. |
-| **SAM 3.1** (`sam-3.1`) | Locates indicator lights in video; finds screens and stickers in photos | A blinking light goes dark on its off frames and may return under a new id, so SAM locates the light once and code counts the flashes in that fixed region. | Image segmentation checked in Phase 1 (**$0.0125**, two calls). In Phase 3 the first concept found the light in a realistic 12 second clip for **$0.024** (120 frames), and code counted amber 2, white 3. |
+| **SAM 3.1** (`sam-3.1`) | Follows indicator lights through a video; finds screens and stickers in photos | A blinking light goes dark on its off frames and may return under a new id. Code finds the spot that changes once the frames are lined up, and SAM follows it from a point prompt, so the counting region sits on the light. | Image segmentation checked in Phase 1 (**$0.0125**, two calls). On a 12 second clip SAM followed the light from a point prompt for **$0.024** (120 frames), and code counted amber 2, white 3. Concept prompts alone were not repeatable on that light. |
 | **Muse Voice Transcribe** (`muse-voice-transcribe-1.0`) | Voice notes in 25 languages | The fallback when a customer can't or won't photograph anything. | Live in Phase 3 on an 11 second synthetic note in WebM, M4A and WAV: transcript plus Spark summary for about **$0.0025** per note. |
 | **Muse Image** (`muse-image-1.0`) | The artwork on this page; guide photos on the customer's own photo (S2) | The model that drew the banner now draws the circle or arrow a technician asks for, and the guide waits for approval before a customer sees it. | Generation checked at **$0.01 per image**. The artwork on this page took 6 generations, **$0.06**. |
 
 **Measured Phase 1 spike spend: $0.0384** of a $1.00 cap, on synthetic inputs made locally (a blue screen and a sticker drawn with Pillow, a blink clip made with Pillow and ffmpeg; no customer photos). List prices as checked on 26 Oct 2026: Spark $1.25 / $4.25 per million input/output tokens, SAM 3.1 $2.50 per 1,000 images and $0.20 per 1,000 frames (50-frame minimum), Voice Transcribe $0.18 per hour, Muse Image $0.01 per image. In the product every call is cached and its cost is logged in dollars. A hard daily cap (default $5) stops spending if something loops.
 
 > [!TIP]
-> Models read and code decides. SAM locates the light; the `group_bursts` function counts the flashes and a lookup table decodes them. In the repo's Dell table, two amber flashes followed by three white ones mean "memory not detected". No language model is asked to count.
+> Models read and code decides. SAM follows the light; the `group_bursts` function counts the flashes and a lookup table decodes them. In the repo's Dell table, two amber flashes followed by three white ones mean "memory not detected". No language model is asked to count.
 
 ## Security by design
 
@@ -120,25 +120,25 @@ The other defences live in `app/eyewitness/security.py` and the modules beside i
 
 ## Status
 
-Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 3 of 4 were built by 28 Oct 2026.** Phase 2 passed an end-to-end run on a staging server. Phase 3 was verified locally with live Meta calls on synthetic media made for the run; its staging run is the next step. Items marked ✅ are in the code in this repo. Everything else names the phase that will build it.
+Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases 1 to 3 of 4 were built and tested on 28 Oct 2026.** On a staging server five end-to-end scenarios passed: a ticket by email, a ticket from the help button, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. The media for the last three were made for the test and are marked synthetic. Items marked ✅ are in the code in this repo. Everything else names the phase that will build it.
 
 | Area | Built by 28 Oct 2026 ✅ | Next 🔜 |
 |---|---|---|
 | Spikes | ✅ Synthetic blue screen, sticker and blink clip generated locally and sent to the live Meta API; SAM's streamed wire format measured and the parser fitted to it | Captures from physical machines for the golden set (Phase 4) |
 | Intake | ✅ The hook on new tickets from the helpdesk poll and the help button, the live Spark intake, and validation of its output (strict schema, templates only, at most 4 items and 2 questions); hold and release with a 24 hour safety timeout; the QR code on the help form sent page (S1) | - |
 | Customer page | ✅ Ordered checklist, live camera preview with countdown and timers, upload with an in-browser and a server-side quality verdict, skip per item, quick answers, a voice-note offer when everything is skipped, Done, and an item that can stay open for seven days | - |
-| Readers | ✅ Quality gate shared by the phone and the server; Spark screen and sticker reads on live captures; SAM 3.1 video location with code counting and the Dell pattern table; voice notes by batch transcribe and a Spark summary; beep codes from the audio track (S3); retake advice from fixed sentences | Reader accuracy on the golden set (Phase 4) |
+| Readers | ✅ Quality gate shared by the phone and the server; Spark screen and sticker reads on live captures; SAM 3.1 following the light, with code counting and the Dell pattern table; voice notes by batch transcribe and a Spark summary; beep codes from the audio track (S3); retake advice from fixed sentences | Reader accuracy on the golden set (Phase 4) |
 | Summary | ✅ The structured internal note posted to the ticket, with readings fenced as untrusted, injection flags and the Meta cost per ticket; the ticket view figure held against the call log by a test; the release to the governor exactly once | - |
 | Helpdesk connectors | ✅ Zammad implemented; Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs with API notes | The remaining connectors (roadmap) |
 | Safety | ✅ Outgoing filter, untrusted fence, upload sniffing, expiring scoped tokens, rate limits on every public route, a per-call cost log with a daily cap, a retention sweep for capture files, and a clean fallback when no key is set; the sticky note injection flagged on a live read | The injection demo with a physical note (demo captures) |
-| Tests | ✅ 41 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, video, voice and injection scenarios for staging | Reader accuracy on the golden set, `eyewitness/tools/eval.py` (Phase 4) |
+| Tests | ✅ 47 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, video, voice and injection scenarios for staging | Reader accuracy on the golden set, `eyewitness/tools/eval.py` (Phase 4) |
 
 <details>
 <summary><strong>The four phases</strong></summary>
 
 - **Phase 1 (done, 28 Oct 2026):** spikes against the live API, the package skeleton, the data model and migration, the security rules as tested pure functions, the customer page, the technician panel and the Zammad connector.
 - **Phase 2 (done, 28 Oct 2026):** the intake hook on new tickets, the live Spark intake, the screen and sticker readers on live captures, the internal summary posted to the ticket, and the handover that releases the ticket to triage exactly once.
-- **Phase 3 (done locally, 28 Oct 2026):** SAM 3.1 video location with code counting and blink decoding, voice notes (transcribe, then summarise), beep codes, live camera capture on the phone page, the help-form QR code, retention, and technician guide photos. Staging verification is next.
+- **Phase 3 (done, 28 Oct 2026):** SAM 3.1 following the light with code counting and blink decoding, voice notes (transcribe, then summarise), beep codes, live camera capture on the phone page, the help-form QR code, retention, and technician guide photos.
 - **Phase 4:** a golden set of captures from physical machines with per-reader accuracy and cost per ticket, the remaining helpdesk connectors, live video assist, on-prem readers and evidence-quality analytics.
 
 </details>
@@ -165,7 +165,7 @@ On publishing, `eyewitness/README.md` becomes this repo's root `README.md` and `
 ├── app/static/js/eyewitness/        # capture flow and panel behaviour
 ├── app/static/css/eyewitness/       # customer page styles
 ├── migrations/versions/             # eyewitness_20261027 (six tables), eyewitness_retention_20261028
-├── tests/eyewitness/                # 41 pure tests: no database, no paid calls
+├── tests/eyewitness/                # 47 pure tests: no database, no paid calls
 └── eyewitness/
     ├── docs/                        # architecture, integration, connectors, phase notes
     │   └── assets/                  # artwork on this page (Muse Image + Pillow wordmarks)
@@ -176,7 +176,7 @@ Run the tests from a Wegweiser checkout with its dependencies installed:
 
 ```bash
 python -m pytest tests/eyewitness -q
-# 41 passed
+# 47 passed
 ```
 
 ## Credits

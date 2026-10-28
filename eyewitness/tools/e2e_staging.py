@@ -513,9 +513,10 @@ def scenario_help(stage: Stage) -> None:
     # widens them, so a device without help fails here instead.
     from app.utilities.help_intake import (help_enabled_for, issue_link,
                                            request_for_token, submit)
-    if not step("help button enabled for the device",
-                bool(help_enabled_for(device)),
-                "switch help on for the device's organisation first"):
+    enabled = bool(help_enabled_for(device))
+    if not step("help button enabled for the device", enabled,
+                "" if enabled
+                else "switch help on for the device's organisation first"):
         return
     try:
         help_req, url = issue_link(
