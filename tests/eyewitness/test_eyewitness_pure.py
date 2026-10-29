@@ -39,8 +39,31 @@ def test_intake_valid_and_invalid():
     assert validate_intake_output(good)["needs_evidence"] is True
     assert validate_intake_output({"needs_evidence": "yes"}) is None
     assert validate_intake_output({**good, "items": [{"template": "nope"}]}) is None
-    assert validate_intake_output({**good, "items": [{"template": "screen_photo"}] * 5}) is None
+    # Repeats collapse to one item; a long list is trimmed, never refused.
+    assert validate_intake_output({**good, "items": [{"template": "screen_photo"}] * 5})["items"] == [
+        {"template": "screen_photo"}]
     assert validate_intake_output(None) is None
+
+
+def test_intake_output_over_the_limits_keeps_the_first_entries():
+    """Glimmer asked three questions on a real ticket; the rules allow
+    two. The decision is kept with the first two, in the model's order."""
+    base = {"needs_evidence": True, "missing": ["error_text"],
+            "physical_symptom": "blinking_lights",
+            "reason_for_technician": "light pattern needed"}
+    items = [{"template": t} for t in ("power_light_video", "screen_photo",
+                                       "sticker", "whole_device",
+                                       "cables_back")]
+    questions = [{"template": t} for t in ("what_changed", "since_when",
+                                           "how_often")]
+    out = validate_intake_output({**base, "items": items, "questions": questions})
+    assert [i["template"] for i in out["items"]] == [
+        "power_light_video", "screen_photo", "sticker", "whole_device"]
+    assert [q["template"] for q in out["questions"]] == ["what_changed",
+                                                          "since_when"]
+    # A name outside the catalogue still refuses the whole output.
+    assert validate_intake_output({**base, "items": items,
+                                   "questions": questions + [{"template": "say_anything"}]}) is None
 
 
 def test_hold_rules():

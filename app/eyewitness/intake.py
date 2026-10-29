@@ -55,8 +55,36 @@ INTAKE_SCHEMA = {
 }
 
 
+MAX_ITEMS = 4
+MAX_QUESTIONS = 2
+
+
+def _first_distinct(entries: list, limit: int) -> list:
+    """The first `limit` distinct templates, in the model's order.
+
+    Every entry has already been checked against the fixed catalogue,
+    so trimming a long list keeps the request inside the rules without
+    throwing the whole decision away.
+    """
+    out, seen = [], set()
+    for entry in entries:
+        template = entry["template"]
+        if template in seen:
+            continue
+        seen.add(template)
+        out.append({"template": template})
+        if len(out) == limit:
+            break
+    return out
+
+
 def validate_intake_output(data) -> dict | None:
-    """Validate Spark structured output. Invalid means no request."""
+    """Validate the intake model's structured output.
+
+    Invalid means no request. A name outside the catalogue makes the
+    whole output invalid. A list longer than the limits (four items,
+    two questions) keeps its first distinct entries.
+    """
     if not isinstance(data, dict):
         return None
     if not isinstance(data.get("needs_evidence"), bool):
@@ -67,13 +95,13 @@ def validate_intake_output(data) -> dict | None:
     if data.get("physical_symptom", "none") not in PHYSICAL:
         return None
     items = data.get("items") or []
-    if not isinstance(items, list) or len(items) > 4:
+    if not isinstance(items, list):
         return None
     for item in items:
         if not isinstance(item, dict) or item.get("template") not in TEMPLATES:
             return None
     questions = data.get("questions") or []
-    if not isinstance(questions, list) or len(questions) > 2:
+    if not isinstance(questions, list):
         return None
     for q in questions:
         if not isinstance(q, dict) or q.get("template") not in QUESTIONS:
@@ -84,8 +112,8 @@ def validate_intake_output(data) -> dict | None:
     return {"needs_evidence": data["needs_evidence"],
             "missing": list(missing),
             "physical_symptom": data.get("physical_symptom", "none"),
-            "items": [{"template": i["template"]} for i in items],
-            "questions": [{"template": q["template"]} for q in questions],
+            "items": _first_distinct(items, MAX_ITEMS),
+            "questions": _first_distinct(questions, MAX_QUESTIONS),
             "reason_for_technician": (reason or "")[:1000]}
 
 
