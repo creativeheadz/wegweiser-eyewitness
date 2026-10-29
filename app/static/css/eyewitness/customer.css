@@ -77,8 +77,10 @@ body {
 .ew-live p { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; margin: 0; }
 .ew-count { font-family: var(--serif); font-weight: 600; font-size: 1.9rem; line-height: 1.1; color: var(--ember); margin: .2rem 0 .6rem !important; }
 .ew-count:empty, .ew-timer:empty { display: none !important; }
-.ew-timer { display: flex; align-items: center; gap: .5rem; font-family: var(--mono); font-size: .86rem; font-weight: 600; color: var(--ember-deep); margin: 0 0 .7rem !important; }
-.ew-timer::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%; background: #d63a2a; box-shadow: 0 0 0 4px rgba(214, 58, 42, .18); }
+.ew-timer { font-family: var(--mono); font-size: .86rem; font-weight: 600; color: var(--ember-deep); margin: 0 0 .7rem !important; }
+/* the dot sits inline, so the phone layout that stacks the camera
+   buttons cannot put it on a line of its own */
+.ew-timer::before { content: ""; display: inline-block; vertical-align: .08em; width: .6rem; height: .6rem; margin-right: .5rem; border-radius: 50%; background: #d63a2a; box-shadow: 0 0 0 4px rgba(214, 58, 42, .18); }
 
 /* buttons: the camera action is the primary one */
 .ew-btn, .ew-skip, .ew-opt, .ew-done, .ew [data-answer-save], .ew-voice-offer button {
@@ -121,6 +123,7 @@ body {
 @media (max-width: 480px) {
   .ew { padding: 1rem .9rem 2rem; }
   .ew-live p { flex-direction: column; align-items: stretch; }
+  .ew-live .ew-timer, .ew-live .ew-count { display: block; }
   .ew-live .ew-btn, .ew-fallback, .ew-skip, .ew-opt, .ew [data-answer-save] { width: 100%; }
   .ew-opt { margin-right: 0; }
 }
