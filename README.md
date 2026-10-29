@@ -127,7 +127,7 @@ Eyewitness uses four Meta models in the cloud, each for one job, and Meta's open
 | **Muse Image**<br>`muse-image-1.0` | The illustrated panels in the film, and guide photos marked up for a customer once a technician approves them | $0.01 an image |
 | **Muse Glimmer**<br>`muse-glimmer`, open weights | Every read for a tenant that keeps evidence on its own network: the intake, screens, labels and the light's keyframes | 65 s for the crash screen on an 8 GB RTX 3050, at no cost |
 
-A whole ticket, with an intake read, a screen photo, a light video and a voice note, came to **$0.0357** in the evaluation. Every call is cached and its cost logged in dollars. A daily cap, $5 by default, stops spending if something loops.
+A whole ticket, with an intake read, a screen photo, a light video and a voice note, costs **$0.036 to $0.061** across the evaluation runs. The light video is most of it, and costs nearly twice as much when SAM needs a second call to follow the light. Every call is cached and its cost logged in dollars. A daily cap, $5 by default, stops spending if something loops.
 
 **Models read, code decides.** SAM finds the light in each frame. The `group_bursts` function counts the flashes, and a table decodes them: in the Dell table, two amber flashes followed by three white mean "memory not detected". No language model is asked to count.
 
