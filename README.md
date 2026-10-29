@@ -165,7 +165,7 @@ Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases
 | Helpdesk connectors | ✅ Zammad implemented; Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs with API notes | The remaining connectors sit in the roadmap below |
 | Safety | ✅ Outgoing filter, untrusted fence, upload sniffing, expiring scoped tokens, rate limits on every public route, a per-call cost log with a daily cap, a retention sweep for capture files, and a clean fallback when no key is set; the sticky note injection flagged on a live read | - |
 | Connectivity | ✅ A signed Zammad push webhook, with the poll as its fallback; Evidence API v1 with per-tenant keys, scopes and signed callbacks; an MCP server with five tools; a Muse Spark agent that works through them | Webhook setup for the other desks (roadmap) |
-| Tests | ✅ 85 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, webhook, API, video, voice and injection scenarios for staging | - |
+| Tests | ✅ 94 pure tests passing, with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` with email, help, webhook, API, video, voice and injection scenarios for staging | - |
 
 <details>
 <summary><strong>The five phases</strong></summary>
@@ -180,9 +180,11 @@ Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases
 
 ## Demo
 
-Video: link to follow. A draft cut sits with the generated demo files for now. The draft runs 2:45 with crossfades. Scenes 1, 2, 5, 7, 9 and 11 also sit in a vertical cut at 1080 by 1920.
+**[Watch the demo video](https://github.com/creativeheadz/wegweiser-eyewitness/releases/download/demo-video/eyewitness-demo.mp4)** (2:33, 1920 by 1080). A cut made for a phone held upright sits beside it on the [release page](https://github.com/creativeheadz/wegweiser-eyewitness/releases/tag/demo-video).
 
-The kit in `eyewitness/demo/` builds the cut from `storyboard.yaml`. Comic panels come from Muse Image. Overlays draw the SAM tracking and the blink timeline in code. Phone recordings use Playwright with a fake camera fed from the synthetic clips. Desktop scenes need a sign-in that only Andrei holds, so the draft shows a plain card for scenes 3, 4 and 10. The voice in the draft comes from ffmpeg flite and each file name marks it as a placeholder. One command rebuilds the cut once the voice files and the desktop recordings sit in the demo folder.
+The product shots are stills from one run of the story on a staging server, with demo data only. Shots marked NEW show what was built during the event, and shots marked EXISTING WEGWEISER show what was there before it. The narration comes from ElevenLabs and the cut is edited in Remotion.
+
+The kit in `eyewitness/demo/` made the first drafts from Muse Image panels and Playwright recordings with a fake camera. Its overlay code draws the SAM tracking and the blink timeline.
 
 Reader scores from `eyewitness/tools/eval.py` on 28 Oct 2026 sit in full in the evaluation note. The golden set held one capture: the Windows 11 crash screen from a demo virtual machine. The screen reader named the stop code on it. The synthetic set held eight files made on this machine. Each blink clip counted two amber flashes and three white flashes. The shaken clip with no light returned the light not found reason. Each voice file returned a transcript. The sticky note photo set the instruction flag. One ticket with an intake read, a screen photo, a light video and a voice note came to $0.0357 on that run. A second run over the same files read the cache and cost nothing.
 
