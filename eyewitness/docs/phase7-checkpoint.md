@@ -90,3 +90,23 @@ EYEWITNESS_API_KEY=<printed key> venv/bin/python eyewitness/tools/e2e_staging.py
 - The `catalogue` scenario still needs its first staging run. It needs staging deployed with the restart above, an Evidence API key, and the synthetic media folder beside the checkout that runs it.
 - `printer_panel` has no synthetic panel photo of its own. Its live Meta check ran on the router photo and returned the `not_found` retake, which is the wording a wrong photo gets. A panel photo would complete the set.
 - The evaluation demo folder started empty in this run, so the run paid $0.1306 in full. A second run over the same files reads the cache at no cost.
+
+## Review by Claude Code (29 Oct 2026)
+
+Claude Code reviewed the build, changed what follows, deployed it to staging and ran every scenario there. Each change has a test.
+
+- **Beeps at the level a phone hears.** With gain control off, a PC speaker 30 cm from a phone reaches about 0.02 to 0.05 of full scale. Synthetic recordings at those levels over fan noise were refused as too quiet: the phone averaged its level readings and the server took the RMS of the whole clip, and a few short beeps leave a clip mostly silent. Both now hold the loudest moment to the voice bar (the RMS of about 43 ms), so the server is never stricter than the phone. The tonal path also accepts quieter recordings. Every level from 0.01 to 0.3 of full scale now reads `long:1 short:2`.
+- **Speech is not a beep.** On purity alone, the demo's German voice note read as thirteen short beeps: a vowel can be as pure as a tone for a tenth of a second. A beep now has to be a steady tone of 0.15 s or more, holding its pitch within 3 percent and its level steady, at the pitch of the other beeps. A tone held past 1.5 s is the continuous pattern. Over the voice notes in English and German, eleven scenes of the film's voice-over, three music beds, fan noise and taps, nothing counts as a beep. A single beep in 20 s, speech over beeps and a held tone all read correctly. The synthetic beeps now share one pitch, as a PC speaker's do.
+- **The vision prompt** names its retake reasons, since a local server holds the schema as a grammar the model never reads. Text read over several lines joins with a slash, so a summary stays on one line. Summaries name their fields in words, and the router's starts with "router".
+- **Tuning by data.** The faded cyan on the synthetic test page went unflagged under "missing or very faint". With "missing or much paler than a full-strength print of that colour" it was caught in every run, and a clean page stayed clean. The printer panel message now leaves its code to the code field. Both were changes to the files only.
+- **The printer panel** gained a synthetic photo: a paper jam with code 13.B2.D1 and an amber light. It reads `printer panel; Paper jam / Open tray 2; 13.B2.D1; problem: paper jam`.
+- **The manual request form** in the technician panel listed four templates by hand. It now lists the whole catalogue by the title the customer sees, so a new file appears there too.
+- **Smaller fixes.** Keywords match whole words, `look_for` may run over several lines, `catalogue-check` holds an outside folder to the operator rules, and the docs give the command's real name. The integration table holds its Phase 6 and 7 rows, and the architecture names every table. The evaluation takes readers from the catalogue and names the reason on negative rows.
+
+Results after review:
+
+- Eyewitness tests: **166 passed**. Full suite: 20 failures, all in the six baseline files.
+- Evaluation on an empty cache: golden **1/1**, synthetic **20/20**, 22 calls for $0.1620.
+- Staging at `2e58dab5`: `flask catalogue-check` passes all twelve files. The `catalogue` scenario passes all 19 steps. It covers the four new tasks, the spoken note refused as beeps, the quiet WebM read as `long:1 short:2`, the printer panel, and a clean test page with no defect. The other eight scenarios pass: 116 steps, the local read from the cache, the tenant set back to `meta`.
+- Brenda's demo tickets on staging, with her device known, through intake v2: **6 of 6** uncached runs ask for `power_light_video`, `screen_photo_next_time` and the `what_changed` question, as the film shows.
+- A live desk ticket saying the monitor shows No Signal: the intake chose `display_fault`, the phone page took the photo, and the panel showed `display; symptom: no signal message; No Signal HDMI 1` two seconds later. The README picture comes from that run.

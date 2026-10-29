@@ -400,8 +400,19 @@ def panel(ticket_id):
                                caps=caps, runs=runs, latest=latest,
                                meta_usd=cost, links=links, qr=qr,
                                provenance=provenance,
-                               reader_backend=reader_backend)
+                               reader_backend=reader_backend,
+                               manual_templates=manual_templates())
     return _view()
+
+
+def manual_templates() -> list[tuple[str, str]]:
+    """Every catalogue template for the manual request form, as
+    (id, the title the customer will see), in title order. A new file
+    in the catalogue shows up here with no change to the panel."""
+    from app.eyewitness import catalogue as _catalogue
+    return sorted(((spec["id"], spec["title"])
+                   for spec in _catalogue.all_specs()),
+                  key=lambda pair: pair[1])
 
 
 @eyewitness_bp.route("/helpdesk/tickets/<int:ticket_id>/evidence/request",

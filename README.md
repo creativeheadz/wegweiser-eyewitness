@@ -88,6 +88,31 @@ sequenceDiagram
 
 </details>
 
+## What a customer can be asked for
+
+Every task a customer can be given is a small file a technician writes: the words the customer sees, one line telling the intake when to ask for it, and for a photo, what to look for and the fields to fill. A new task is a new file and a restart, with no code to write. Counting stays in code. Spark can describe a photo, but it can't hear a beep or count flashes reliably, so those tasks name a code reader and a table.
+
+<img src="eyewitness/docs/assets/readme-catalogue.webp" alt="The catalogue file display_fault.yaml with its title, instruction and fields marked. The title and instruction appear word for word as step 1 on the customer's phone, and the fields come back in the technician's panel as the reading: display, symptom no signal message, No Signal HDMI 1, ViewPanel VP-240." width="100%">
+
+The picture comes from one live run on staging: a ticket saying the monitor shows No Signal, the intake choosing this file, a photo taken on the phone page, and the reading two seconds later.
+
+| The customer is asked to | How it is read |
+|---|---|
+| Photograph the error on the screen | Spark, with the prompt written for Windows crash screens |
+| Photograph the error when it happens again | The same, with the link kept open for seven days |
+| Film the power light | SAM 3.1 finds the light, and code counts the flashes against the Dell table |
+| Record the beeps | Code counts the steady tones against the beep table, with no model |
+| Photograph the sticker | Spark, checked against the serials Wegweiser already knows |
+| Photograph the printer panel | Spark, from its catalogue file: the message, the code and the lights |
+| Photograph a printed test page | Spark, from its catalogue file: streaks, fading and missing colours |
+| Photograph the screen showing the problem | Spark, from its catalogue file: no signal, lines, colours or cracks |
+| Photograph the lights on your router | Spark, from its catalogue file: each light and its colour |
+| Photograph the whole device | The quality check, then the technician looks |
+| Photograph the cables at the back | The quality check, then the technician looks |
+| Tell us what happened | Voice Transcribe, then a Spark summary |
+
+A tenant on its own hardware reads the catalogue's photo tasks with Muse Glimmer like every other read, and the beep counter needs no model at all. An operator can add photo tasks from a folder of their own, and `flask catalogue-check` tests a new file before the restart. The [catalogue guide](eyewitness/docs/catalogue.md) walks through a complete file.
+
 ## Meta inside
 
 <img src="eyewitness/docs/assets/readme-sam.webp" alt="SAM 3.1 tracking the power light on a PC in a video, with a magnified view of the light, a timeline of the flashes counted in code, and the result: Dell power light code, two amber and three white, memory not detected." width="100%">
@@ -96,7 +121,7 @@ Eyewitness uses four Meta models in the cloud, each for one job, and Meta's open
 
 | Model | Its job in Eyewitness | Measured |
 |---|---|---|
-| **Muse Spark**<br>`muse-spark-1.3` | Decides what a ticket is missing, then reads screens, labels and voice-note transcripts into strict fields | A screen read cost $0.0033 and named the stop code `MEMORY_MANAGEMENT (0x1A)`. An intake decision cost $0.0027 |
+| **Muse Spark**<br>`muse-spark-1.3` | Decides what a ticket is missing, then reads screens, labels, voice-note transcripts and every photo task in the catalogue into strict fields | A screen read cost $0.0033 and named the stop code `MEMORY_MANAGEMENT (0x1A)`. An intake decision cost $0.0027 |
 | **SAM 3.1**<br>`sam-3.1` | Follows a blinking light through a clip from a point prompt, and finds screens and labels in photos | A 12 second clip of 120 frames cost $0.024, and code counted two amber flashes and three white |
 | **Muse Voice Transcribe**<br>`muse-voice-transcribe-1.0` | Voice notes in 25 languages, for a customer who can't take a photo | About $0.0025 a note, with Spark's summary |
 | **Muse Image**<br>`muse-image-1.0` | The illustrated panels in the film, and guide photos marked up for a customer once a technician approves them | $0.01 an image |
@@ -165,22 +190,23 @@ Zendesk, Freshdesk, HaloPSA and ConnectWise are next, as connectors with the sam
 
 Everything in this repo was built between 26 October and 4 November 2026 for the Meta Global AI Developer Hackathon. Wegweiser itself, the monitoring platform with its helpdesk connector and triage, existed before the event and stays private.
 
-Eight end-to-end scenarios pass on a staging server with live model calls: a ticket by email, a ticket from the help button, a ticket pushed by the Zammad webhook, a request through the Evidence API, a blinking-light video, a voice note, a sticky note that tries to instruct the AI, and a ticket read on the tenant's own hardware by Muse Glimmer. The media for the blinking light, the voice note and the sticky note were made for the test and are marked synthetic.
+Nine end-to-end scenarios pass on a staging server with live model calls: a ticket by email, a ticket from the help button, a ticket pushed by the Zammad webhook, a request through the Evidence API, a blinking-light video, a voice note, a sticky note that tries to instruct the AI, a ticket read on the tenant's own hardware by Muse Glimmer, and the catalogue's tasks from a printed test page to a beep recording. The media for those tests were made for them and are marked synthetic.
 
 | Part | Built and tested |
 |---|---|
 | Intake | The hook on new tickets from the helpdesk and the help button. The live Spark intake, held to a strict schema: templates only, at most four items and two questions. A ticket is held and released once, with a 24-hour safety timeout |
 | Phone page | One step at a time, with a live camera, a countdown and timers. Each capture is checked in the browser and again on the server. Skips, quick answers, a voice-note offer, and an item that stays open for seven days |
-| Readers | Spark reads screens and labels. SAM 3.1 tracks the light while code counts the blinks against the Dell table. Voice notes go through Voice Transcribe and a Spark summary. Beep codes come from the audio track |
+| Readers | Spark reads screens, labels and every photo task in the catalogue. SAM 3.1 tracks the light while code counts the blinks against the Dell table. Voice notes go through Voice Transcribe and a Spark summary. Code counts beep codes in a recording or a video's sound |
+| Catalogue | Twelve evidence tasks as data files, each checked when the app starts: the customer's words, when to ask, and for a photo what to look for and the fields to fill. A folder for an operator's own tasks, and a command that checks a new file |
 | Ticket notes | An internal note with fenced readings, injection flags and the Meta cost per ticket, and a customer note built from templates, both posted as HTML |
 | Helpdesks | Zammad built, with a signed push webhook and the poll as its fallback. Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs |
 | Connectivity | Evidence API v1 with per-tenant keys, scopes and signed callbacks. The MCP server, and a Spark agent that works through it |
 | Own hardware | A per-tenant choice to read with Muse Glimmer on the company's own server, through any OpenAI-compatible host, with no fallback to the cloud |
 | Safety | The outgoing filter, the untrusted fence, upload sniffing, expiring scoped links, rate limits, a daily cost cap and a retention sweep for capture files |
-| Tests | 118 tests with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` for the staging scenarios |
+| Tests | 166 tests with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` for the staging scenarios |
 
 <details>
-<summary><strong>The five phases</strong></summary>
+<summary><strong>The phases</strong></summary>
 
 - **Phase 1 (done, 28 Oct 2026):** spikes against the live API, the package skeleton, the data model and migration, the security rules as tested pure functions, the customer page, the technician panel and the Zammad connector.
 - **Phase 2 (done, 28 Oct 2026):** the intake hook on new tickets, the live Spark intake, the screen and sticker readers on live captures, the internal summary posted to the ticket, and the handover that releases the ticket to triage exactly once.
@@ -189,6 +215,7 @@ Eight end-to-end scenarios pass on a staging server with live model calls: a tic
 - **Phase 5 (done, 28 Oct 2026):** the connectivity layer: a signed Zammad push webhook, the Evidence API with keys and signed callbacks, and an MCP server that a Muse Spark agent works through.
 - **Polish (29 Oct 2026):** the phone page in Wegweiser's own style, the ticket notes set out as HTML, and the demo film.
 - **Phase 6 (done, 29 Oct 2026):** readers on the tenant's own hardware with Muse Glimmer, Meta's open-weights model.
+- **Phase 7 (done, 29 Oct 2026):** the evidence catalogue as data: twelve tasks in files, a generic vision reader for photo tasks, and beep recordings counted in code.
 
 </details>
 
@@ -204,6 +231,7 @@ The six panels in the film were drawn by Muse Image (`muse-image-1.0`) at one ce
 - Live video assist, for a capture that needs a person at both ends.
 - Voice notes and light tracking on the support company's own hardware too, with an open transcription model and SAM's open weights, so a tenant on its own hardware loses nothing.
 - Evidence scores across clients, so a team can see which requests come back unusable.
+- Catalogues per tenant, edited in the technician settings, so each support company keeps tasks of its own.
 
 ## Architecture
 
@@ -212,6 +240,7 @@ Eyewitness is a Flask package (`app/eyewitness/`) that plugs into Wegweiser, a p
 - [Architecture](eyewitness/docs/architecture.md): the pipeline, the tables, hold and release, and the cost controls.
 - [Integration points](eyewitness/docs/integration.md): every place where Eyewitness touches the host platform, by file and phase. Those host files live in the private Wegweiser repo.
 - [Connectors](eyewitness/docs/connectors.md): the helpdesk connector interface, with Zammad built and the other four as stubs with their API notes.
+- [The catalogue](eyewitness/docs/catalogue.md): how a task file is written, checked and read.
 
 ## Repo map
 
@@ -222,27 +251,29 @@ On publishing, `eyewitness/README.md` becomes this repo's root `README.md` and `
 ├── README.md                        # this page (source: eyewitness/README.md)
 ├── LICENSE                          # (source: eyewitness/LICENSE)
 ├── app/eyewitness/                  # models, Meta client, intake, readers,
-│                                    # connectors, security, routes, API, tasks, prompts
+│                                    # connectors, security, routes, API, tasks, prompts,
+│                                    # and catalogue/ with one YAML file per evidence task
 ├── app/templates/eyewitness/        # the customer phone page, expired page, technician panel
 ├── app/static/js/eyewitness/        # capture flow and panel behaviour
 ├── app/static/css/eyewitness/       # the phone page in Wegweiser's paper theme
 ├── migrations/versions/             # eyewitness_20261027, eyewitness_retention_20261028,
 │                                    # eyewitness_api_20261029, eyewitness_onprem_20261029
-├── tests/eyewitness/                # 118 tests: no database, no paid calls
+├── tests/eyewitness/                # 166 tests: no database, no paid calls
 └── eyewitness/
     ├── docs/                        # architecture, integration, connectors, API, evaluation,
-    │                                # the on-prem guide and its Modelfile
+    │                                # the catalogue guide, the on-prem guide and its Modelfile
     │   └── assets/                  # the images on this page
     ├── mcp/                         # the MCP server and the Muse Spark agent demo
     ├── demo/                        # storyboard, panel prompts, overlays, recorders
-    └── tools/                       # spike.py, eval.py, e2e_staging.py, publish.sh
+    └── tools/                       # spike.py, eval.py, e2e_staging.py, publish.sh,
+                                     # make_catalogue_media.py
 ```
 
 Run the tests from a Wegweiser checkout with its dependencies installed:
 
 ```bash
 python -m pytest tests/eyewitness -q
-# 118 passed
+# 166 passed
 ```
 
 ## Credits

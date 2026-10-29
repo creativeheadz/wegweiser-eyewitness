@@ -76,9 +76,11 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset>
       <legend>Request evidence manually</legend>
-      {% for key, spec in [('screen_photo','Screen photo'),('power_light_video','Power light video'),('sticker','Sticker photo'),('voice_note','Voice note')] %}
-      <label><input type="checkbox" name="templates" value="{{ key }}"> {{ spec }}</label>
+      <div class="ew-manual">
+      {% for key, title in manual_templates or [] %}
+      <label><input type="checkbox" name="templates" value="{{ key }}"> {{ title }}</label>
       {% endfor %}
+      </div>
     </fieldset>
     <button type="submit" class="fk-btn fk-btn--primary fk-btn--sm">Create request</button>
     <p data-ew-msg role="status"></p>

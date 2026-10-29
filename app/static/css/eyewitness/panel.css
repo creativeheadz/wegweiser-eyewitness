@@ -6,3 +6,8 @@
 .ew-panel .ew-asked .fk-pill { margin-left: 0.5rem; }
 .ew-panel .ew-asked__reading { display: block; margin-top: 0.2rem; opacity: 0.85; }
 .ew-panel fieldset label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.25rem 1.1rem 0.25rem 0; }
+/* The manual request list holds every catalogue template, by the title
+   the customer will see, in two columns where the panel is wide enough. */
+.ew-panel .ew-manual { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); column-gap: 1rem; }
+.ew-panel .ew-manual label { margin: 0.2rem 0; align-items: flex-start; }
+.ew-panel .ew-manual input { margin-top: 0.2rem; }

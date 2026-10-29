@@ -570,6 +570,17 @@ def test_wording_fallback_keywords_and_negatives():
     assert "display_fault" in items
 
 
+def test_manual_request_form_lists_the_whole_catalogue():
+    from app.eyewitness.routes import manual_templates
+    pairs = manual_templates()
+    assert {key for key, _ in pairs} == {spec["id"] for spec in catalogue.all_specs()}
+    assert [title for _, title in pairs] == sorted(title for _, title in pairs)
+    assert ("display_fault", "Photograph the screen showing the problem") in pairs
+    panel = (ROOT / "app/templates/eyewitness/panel.html").read_text(encoding="utf-8")
+    assert "for key, title in manual_templates" in panel
+    assert "('screen_photo','Screen photo')" not in panel
+
+
 def test_templates_payload_adds_reader_lines_and_fields():
     payload = templates_payload()
     by_name = {t["template"]: t for t in payload["templates"]}
