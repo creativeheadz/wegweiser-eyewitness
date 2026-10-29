@@ -10,7 +10,7 @@ label: "printer panel"
 fields:
   - name: message
     type: text
-    describe: "The message on the display, exactly as shown, or null."
+    describe: "The message on the display, exactly as shown, leaving out any error or event code, or null."
     in_summary: true
   - name: error_code
     type: text

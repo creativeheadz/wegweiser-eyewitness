@@ -1,7 +1,7 @@
 """Evidence template catalogue: every template is a data file.
 
 One YAML file per template sits beside this module. Operator files
-in EYE WITNESS_CATALOGUE_DIR may add vision templates only. A bad
+in EYEWITNESS_CATALOGUE_DIR may add vision templates only. A bad
 built-in file raises CatalogueError at import; a bad operator file
 is skipped with one log line. Web and worker both need a restart
 to see a change.
@@ -117,7 +117,9 @@ def _validate(data, fname: str, *, operator: bool, question_names: frozenset) ->
         _customer_text(fname, "record_label", rl, 1, 30)
     retake = data.get("retake")
     if reader == "vision":
-        _text_ok(fname, "look_for", data.get("look_for"), 40, 1500)
+        # A prompt may run over several lines, so a YAML block is fine.
+        _text_ok(fname, "look_for", data.get("look_for"), 40, 1500,
+                 one_line=False)
         _text_ok(fname, "label", data.get("label"), 2, 40, one_line=True)
         fields = data.get("fields")
         if not isinstance(fields, list) or not (1 <= len(fields) <= 8):
@@ -257,14 +259,31 @@ def all_specs() -> list[dict]:
     return [CATALOGUE[k] for k in sorted(CATALOGUE)]
 
 
+def built_in_ids() -> frozenset:
+    """The ids of the files shipped beside this module."""
+    return frozenset(os.path.splitext(n)[0]
+                     for n in os.listdir(_built_in_dir())
+                     if n.endswith((".yaml", ".yml")))
+
+
+def is_built_in_path(path: str) -> bool:
+    """True when `path` is the built-in folder or a file in it."""
+    real = os.path.realpath(path)
+    folder = real if os.path.isdir(real) else os.path.dirname(real)
+    return folder == os.path.realpath(_built_in_dir())
+
+
 def check_paths(entries: list) -> list[tuple[str, dict | None, str | None]]:
     """Validate (path, operator) pairs for catalogue-check.
 
-    Returns one (name, spec, error) row per file, in order.
+    Returns one (name, spec, error) row per file, in order. Operator
+    files are held to the operator rules, as at load: vision only,
+    and no id a built-in file already uses.
     """
     import yaml
     rows: list[tuple[str, dict | None, str | None]] = []
     qn = _question_names()
+    shipped = built_in_ids()
     for p, operator in entries:
         files = []
         if os.path.isdir(p):
@@ -282,6 +301,8 @@ def check_paths(entries: list) -> list[tuple[str, dict | None, str | None]]:
                     data = yaml.safe_load(fh)
                 spec = _validate(data, name, operator=operator,
                                  question_names=qn)
+                if operator and spec["id"] in shipped:
+                    raise _err(name, f"id {spec['id']} is already used")
                 rows.append((name, spec, None))
             except CatalogueError as exc:
                 rows.append((name, None, str(exc)))

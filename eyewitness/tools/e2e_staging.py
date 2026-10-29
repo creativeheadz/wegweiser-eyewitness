@@ -863,7 +863,10 @@ def scenario_catalogue(stage: Stage) -> None:
     instructions exactly. The spoken voice note goes to the beep
     item first and must come back as the no_beeps retake. Each
     synthetic file then goes through the customer page routes and
-    its reading is checked. Needs an Evidence API key and the
+    its reading is checked; the beeps are the quiet WebM, at the
+    level a phone hears with its gain control off. A second request
+    checks the printer panel on the vision reader and a clean test
+    page that must show no defect. Needs an Evidence API key and the
     folder from make_catalogue_media.py.
     """
     import os
@@ -918,22 +921,49 @@ def scenario_catalogue(stage: Stage) -> None:
          and "No Signal" in str((r.get("fields") or {}).get("on_screen_message") or "")),
         ("network_lights", "synthetic-router-lights.png", "router.png", "image/png",
          lambda r: (r.get("fields") or {}).get("warning_light") is True),
-        ("beep_recording", "synthetic-beeps.wav", "beeps.wav", "audio/wav",
+        ("beep_recording", "synthetic-beeps-quiet.webm", "beeps.webm", "audio/webm",
          lambda r: r.get("pattern") == "long:1 short:2"),
     ]
-    for template, filename, upload_name, mime, check in uploads:
-        item = items.get(template) or {}
-        cap_id, code = stage.upload(token, item.get("id"),
-                                    os.path.join(folder, filename),
-                                    upload_name, mime)
-        if not step(f"{template} uploaded", cap_id is not None, f"http={code}"):
-            continue
-        state = stage.wait_capture(token, cap_id, args.timeout)
-        row = stage.capture_row(cap_id)
-        reading = (row.reading or {}) if row else {}
-        step(f"{template} reading",
-             bool(state and state.get("status") == "ok") and check(reading),
-             f"status={(state or {}).get('status')} reading={reading}"[:300])
+
+    def run_uploads(label, token, items, uploads):
+        for template, filename, upload_name, mime, check in uploads:
+            item = items.get(template) or {}
+            cap_id, code = stage.upload(token, item.get("id"),
+                                        os.path.join(folder, filename),
+                                        upload_name, mime)
+            if not step(f"{label}{template} uploaded", cap_id is not None,
+                        f"http={code}"):
+                continue
+            state = stage.wait_capture(token, cap_id, args.timeout)
+            row = stage.capture_row(cap_id)
+            reading = (row.reading or {}) if row else {}
+            step(f"{label}{template} reading",
+                 bool(state and state.get("status") == "ok") and check(reading),
+                 f"status={(state or {}).get('status')} "
+                 f"summary={reading.get('summary')}"[:300])
+
+    run_uploads("", token, items, uploads)
+    second = stage.http.post(
+        f"{stage.base}/api/eyewitness/v1/requests", headers=headers,
+        json={"templates": ["printer_panel", "printer_test_page"],
+              "external_ref": "e2e-catalogue-check-2"}, timeout=30)
+    created2 = second.json() if second.status_code == 201 else {}
+    if not step("second catalogue request created",
+                second.status_code == 201 and bool(created2.get("id")),
+                f"http={second.status_code}"):
+        return
+    items2 = {i.get("template"): i for i in created2.get("items") or []}
+    link2 = created2.get("link") or ""
+    token2 = link2.rstrip("/").split("/")[-1] if link2 else ""
+    run_uploads("second request: ", token2, items2, [
+        ("printer_panel", "synthetic-printer-panel.png", "panel.png", "image/png",
+         lambda r: (r.get("fields") or {}).get("problem") == "paper_jam"
+         and (r.get("fields") or {}).get("error_code") == "13.B2.D1"),
+        ("printer_test_page", "synthetic-printer-test-page-clean.png", "clean.png",
+         "image/png",
+         lambda r: "streaks" not in ((r.get("fields") or {}).get("defects") or [])
+         and not (r.get("fields") or {}).get("missing_colours")),
+    ])
 
 
 SCENARIOS = {"email": scenario_email, "help": scenario_help,

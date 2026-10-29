@@ -34,7 +34,17 @@ def build_system(spec: dict) -> str:
         if f.get("choices"):
             line += " Choices: " + ", ".join(f["choices"]) + "."
         lines.append(line)
+    # A local server holds the schema as a grammar the model never
+    # reads, so the reasons are named in the prompt as well.
+    lines += ["", "Retake reasons when legible is false: "
+              + ", ".join(_retake_reasons(spec)) + "."]
     return "\n".join(lines)
+
+
+def _retake_reasons(spec: dict) -> list[str]:
+    """The reasons a model may give: the file's keys, then other."""
+    return [k for k in (spec.get("retake") or {})
+            if k not in ("not_found", "other")] + ["other"]
 
 
 def build_schema(spec: dict) -> dict:
@@ -54,15 +64,13 @@ def build_schema(spec: dict) -> dict:
             props[f["name"]] = {"type": "array", "items": item}
         else:  # yes_no
             props[f["name"]] = {"type": "boolean"}
-    retake_keys = [k for k in (spec.get("retake") or {})
-                   if k not in ("not_found", "other")]
     return {
         "type": "object",
         "properties": {
             "found": {"type": "boolean"},
             "legible": {"type": "boolean"},
             "retake_reason": {"type": "string",
-                              "enum": ["none", *retake_keys, "other"]},
+                              "enum": ["none", *_retake_reasons(spec)]},
             "text_lines": {"type": "array", "items": {"type": "string"}},
             "observations": {"type": "array",
                              "items": {"type": "string"}},
@@ -86,8 +94,11 @@ def _sanitise_fields(raw_fields, spec: dict) -> dict:
         name, tp = f["name"], f["type"]
         value = raw_fields.get(name)
         if tp == "text":
-            out[name] = (str(value)[:120] if isinstance(value, str)
-                         and value.strip() else None)
+            # A display can show several lines. They join with a slash
+            # so the summary and the note stay on one line each.
+            lines = (value.splitlines() if isinstance(value, str) else [])
+            joined = " / ".join(part.strip() for part in lines if part.strip())
+            out[name] = joined[:120] or None
         elif tp == "choice":
             out[name] = value if value in (f.get("choices") or []) else None
         elif tp == "list":
@@ -108,15 +119,16 @@ def _summary(spec: dict, fields: dict) -> str:
         value = fields.get(f["name"])
         if value is None or value == "" or value == []:
             continue
+        name = f["name"].replace("_", " ")
         if f["type"] == "yes_no":
             if value is True:
-                parts.append(f["name"].replace("_", " "))
+                parts.append(name)
         elif f["type"] == "list":
             shown = ", ".join(str(v).replace("_", " ") for v in value)
             if shown:
-                parts.append(f"{f['name']}: {shown}")
+                parts.append(f"{name}: {shown}")
         elif f["type"] == "choice":
-            parts.append(f"{f['name']}: {str(value).replace('_', ' ')}")
+            parts.append(f"{name}: {str(value).replace('_', ' ')}")
         else:
             parts.append(str(value))
     text = "; ".join(parts)

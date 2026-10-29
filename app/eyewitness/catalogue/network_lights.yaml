@@ -7,7 +7,7 @@ ask_when: "The internet or network at the customer's site is down, slow or dropp
 keywords: [router, internet is down, no internet, wifi is down, broadband, internet box]
 reader: vision
 look_for: "The front of a router, internet box, modem or network switch with its status lights. For every light you can see, give its label or symbol and its colour, or say it is off. Note any light that is red or orange. Read the make and model when they show."
-label: "router lights"
+label: "router"
 fields:
   - name: lights
     type: list

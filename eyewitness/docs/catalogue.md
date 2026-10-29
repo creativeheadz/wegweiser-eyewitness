@@ -20,7 +20,7 @@ refused at load, so a typo fails loudly.
 | Key | Rule |
 |---|---|
 | `id` | Equals the file name without `.yaml`. Matches `^[a-z][a-z0-9_]{2,39}$`. Never `custom`, never a quick question name, never starting `q_`. |
-| `version` | Integer from 1. The reading records it as `template@version`. |
+| `version` | Integer from 1. The reading records it as `catalogue_version`, beside the template name. |
 | `kind` | `photo`, `video` or `voice`. A voice item records sound from the phone microphone. |
 | `title` | Customer text, 3 to 80 characters, one line. |
 | `instruction` | Customer text, 10 to 300 characters, one line. |
@@ -30,7 +30,7 @@ refused at load, so a typo fails loudly.
 | `keywords` | Optional. Up to 12 lowercase phrases of 3 to 40 characters. The wording fallback uses them when no model answers. |
 | `reader` | `vision`, `screen`, `sticker`, `photo`, `video`, `voice` or `beeps`. |
 | `record_label` | Optional, kind `voice` only, at most 30 characters. The phone button shows it, with Record voice note as the default. |
-| `look_for` | Vision only. 40 to 1500 characters. What the model looks for in the photo. |
+| `look_for` | Vision only. 40 to 1500 characters, on one line or a YAML block of several. What the model looks for in the photo. |
 | `label` | Vision only. 2 to 40 characters. The start of the reading summary. |
 | `fields` | Vision only. 1 to 8 fields the model fills. Code checks each one again. |
 | `retake` | Reason to fixed customer sentence, 10 to 200 characters each. The wording for each reader is set out below. |
@@ -66,13 +66,13 @@ Each field in `fields` holds:
 
 | Reader | What runs |
 |---|---|
-| `vision` | The generic reader in `readers/vision.py`. The quality gate runs first, with no model call on a failed gate. One structured read follows the fixed prompt `prompts/vision_read_v1.md`, with this item, its `look_for` and one line per field added by code. Code checks every field again, builds the summary from the label and the `in_summary` fields, and turns a reason into the template sentence. |
+| `vision` | The generic reader in `readers/vision.py`. The quality gate runs first, with no model call on a failed gate. One structured read follows the fixed prompt `prompts/vision_read_v1.md`, with this item, its `look_for` and one line per field added by code. Code checks every field again, joins text read over several lines with a slash, builds the summary from the label and the `in_summary` fields, and turns a reason into the template sentence. |
 | `screen` | The Windows crash screen reader. Its prompt is written for that layout, so printer panels no longer use it. |
 | `sticker` | Barcode first, then a model read, with the serial checked against the ticket device. |
 | `photo` | The quality gate only. The technician reads the photo. |
 | `video` | SAM tracking with code counting the flashes, plus the beep track from the clip audio. |
 | `voice` | Transcription, then a model summary. |
-| `beeps` | Code only, no model. The recording is converted to 16 kHz mono WAV with a 20 second cap. Duration and level use the voice numbers, so phone and server agree. Only tonal segments count, so speech never counts as beeps. The count, pattern and table pointer come from `decode/beep_codes.json`. It runs the same on a tenant reading on its own hardware. |
+| `beeps` | Code only, no model. The recording is converted to 16 kHz mono WAV with a 20 second cap. Under one second is too short. It is too quiet when its loudest moment stays under the voice bar, which is the check the phone makes too: a few beeps leave a recording mostly silent, so the average says little. A beep counts only as a steady tone of 0.15 s or more that holds one pitch and one level, at the pitch of the other beeps, so speech and music never count. A tone held past 1.5 s is the continuous pattern. The count, pattern and table pointer come from `decode/beep_codes.json`. It runs the same on a tenant reading on its own hardware. |
 
 A new template needs a code reader only where the task itself is
 code work: counting, timing, a threshold, a barcode or a serial
@@ -92,6 +92,11 @@ for is a `vision` file.
   for a count of flashes or beeps.
 - Say what to use when the photo shows nothing: the schema fills
   null, an empty list or `none`, and the model must never guess.
+- Say what counts as a fault in terms the photo can show. On the
+  synthetic test page, "missing or very faint" let a washed out cyan
+  block through, and "missing or much paler than a full-strength
+  print of that colour" caught it in every run while a clean page
+  stayed clean. That change was one line in the file.
 
 ## The operator folder
 
@@ -105,11 +110,12 @@ wording. Web and worker both need a restart to see a change.
 ## Checking files
 
 ```bash
-venv/bin/flask eyewitness catalogue-check [PATH]
+venv/bin/flask catalogue-check [PATH]
 ```
 
 With no path it checks the built-in folder, then the operator
-folder where one is set. It prints one line per template with the
+folder where one is set. A path outside the built-in folder meets
+the operator rules, as it would at load. It prints one line per template with the
 id, kind, reader and OK, or the rule broken. Exit code 1 on any
 error. `--show` also prints the generated vision prompt and schema
 for each vision template.
@@ -127,7 +133,7 @@ instruction: "Print a test page from the printer's own menu. Lay it flat in good
 ask_when: "The ticket describes poor print quality: streaks, lines, faded or patchy print, smudges, missing colours or blank pages."
 keywords: [streak, streaks, faded print, smudge, print quality, blank page, lines on the page, missing colour]
 reader: vision
-look_for: "A printed page, ideally the printer's own test or configuration page. Look for print defects: streaks or lines running down the page, bands across it, faded or patchy areas, smudges, a ghost of the image repeated lower down, a colour missing from the colour blocks, skew, or a blank page. Read the printer model, the page count and any toner or ink levels printed on the page."
+look_for: "A printed page, ideally the printer's own test or configuration page. Look for print defects: streaks or lines running down the page, bands across it, faded or patchy areas, smudges, a ghost of the image repeated lower down, a colour block that is missing or much paler than a full-strength print of that colour, skew, or a blank page. Read the printer model, the page count and any toner or ink levels printed on the page."
 label: "test page"
 fields:
   - name: defects
@@ -137,7 +143,7 @@ fields:
     in_summary: true
   - name: missing_colours
     type: list
-    describe: "Colours that are missing or very faint in the colour blocks."
+    describe: "Colours whose block is missing, or much paler than a full-strength print of that colour."
     choices: [cyan, magenta, yellow, black]
     in_summary: true
   - name: printer_model

@@ -13,9 +13,12 @@ posts a follow-up internal note and the governor does not run again.
 
 Data: `eyewitness_intake_runs`, `eyewitness_requests`,
 `eyewitness_captures`, `eyewitness_meta_calls`,
-`eyewitness_meta_cache`, `eyewitness_tenant_settings`
-(migrations `eyewitness_20261027` and
-`eyewitness_retention_20261028`). Captures live under
+`eyewitness_meta_cache`, `eyewitness_tenant_settings`,
+`eyewitness_api_keys` and `eyewitness_callback_deliveries` (migrations
+`eyewitness_20261027`, `eyewitness_retention_20261028`,
+`eyewitness_api_20261029` and `eyewitness_onprem_20261029`, which
+adds the tenant's `reader_backend`). The catalogue needs no table:
+its templates are files. Captures live under
 `EYEWITNESS_STORAGE_DIR` with UUID names and a SHA-256, never under
 `app/static`.
 
@@ -72,8 +75,8 @@ consumer, and `tasks.TEMPLATE_READERS` comes from the files, with
 (`readers/vision.py`, prompt `vision_read_v1.md`) serves any photo
 template from its `look_for` and fields. Code checks the fields,
 builds the summary and picks the fixed retake sentence. Beep
-recordings go to a code-only reader: tonal segments count, speech
-does not, and the pattern table gives the pointer. Operator files
+recordings go to a code-only reader: only steady tones count, and
+the pattern table gives the pointer. Operator files
 in `EYEWITNESS_CATALOGUE_DIR` may add vision templates only. See
 `docs/catalogue.md`.
 

@@ -255,6 +255,22 @@ def test_schema_builder_is_strict_at_both_levels():
     assert schema["properties"]["retake_reason"]["enum"][0] == "none"
 
 
+def test_question_names_match_the_quick_questions():
+    assert catalogue._question_names() == frozenset(QUESTIONS)
+
+
+def test_look_for_may_run_over_several_lines(tmp_path):
+    spec = _vision_spec(look_for="A demo thing with a label.\nCopy the label exactly as shown on the thing.")
+    _write(tmp_path, spec)
+    rows = catalogue.check_paths([(str(tmp_path), False)])
+    assert rows[0][2] is None, rows
+
+
+def test_prompt_builder_names_the_retake_reasons():
+    system = build_system(catalogue.get("display_fault"))
+    assert system.rstrip().endswith("Retake reasons when legible is false: glare, cropped, blur, other.")
+
+
 def test_prompt_builder_holds_rules_look_for_and_fields():
     spec = catalogue.get("network_lights")
     system = build_system(spec)
@@ -305,8 +321,29 @@ def test_vision_summary_yes_no_and_list_wording():
                       "all_lights_off": False, "device_model": None},
            "instruction_like_text": False, "instruction_excerpt": None}
     out = verdict_from_reading(raw, spec, {})
-    assert "warning light" in out["reading"]["summary"]
-    assert "all lights off" not in out["reading"]["summary"]
+    assert out["reading"]["summary"] == "router; lights: Internet: red; warning light"
+    page = catalogue.get("printer_test_page")
+    raw_page = {**raw, "fields": {"defects": ["streaks", "missing_colour"],
+                                  "missing_colours": ["cyan"],
+                                  "printer_model": "ColourJet CJ-410",
+                                  "toner_levels": None, "page_count": None}}
+    summary = verdict_from_reading(raw_page, page, {})["reading"]["summary"]
+    assert summary == ("test page; defects: streaks, missing colour; "
+                       "missing colours: cyan; ColourJet CJ-410")
+
+
+def test_text_read_over_several_lines_stays_on_one():
+    spec = catalogue.get("printer_panel")
+    raw = {"found": True, "legible": True, "retake_reason": "none",
+           "text_lines": [], "observations": [],
+           "fields": {"message": "Paper jam\n  Open tray 2\n", "error_code": "13.B2.D1",
+                      "problem": "paper_jam", "lights": [], "printer_model": None},
+           "instruction_like_text": False, "instruction_excerpt": None}
+    out = verdict_from_reading(raw, spec, {})
+    assert out["reading"]["fields"]["message"] == "Paper jam / Open tray 2"
+    assert "\n" not in out["reading"]["summary"]
+    assert out["reading"]["summary"] == ("printer panel; Paper jam / Open tray 2; "
+                                         "13.B2.D1; problem: paper jam")
 
 
 def test_no_model_call_on_a_failed_quality_gate():
@@ -329,7 +366,7 @@ def test_local_tenant_never_reaches_the_meta_api(monkeypatch):
     out = read_vision(_photo_bytes(), spec, tenant_uuid="tenant-x")
     assert out["verdict"] == "ok" and out["reading"].get("stub")
     assert not fired
-    # Beeep recordings call no model at all, on either backend.
+    # Beep recordings call no model at all, on either backend.
     beep = make_item("beep_recording")
     assert beep["raw_audio"] is True
 
@@ -337,11 +374,35 @@ def test_local_tenant_never_reaches_the_meta_api(monkeypatch):
 # -- beep recordings ----------------------------------------------------------
 
 def _beep_data(square_second=False) -> bytes:
+    # A PC speaker sounds every beep of a pattern at one pitch.
     gap = np.zeros(int(SR * 0.35))
-    parts = [_tone(880, 0.8), gap,
-             _tone(1320, 0.25, square=square_second), gap,
-             _tone(1320, 0.25), np.zeros(int(SR * 0.6))]
+    parts = [_tone(1000, 0.8), gap,
+             _tone(1000, 0.25, square=square_second), gap,
+             _tone(1000, 0.25), np.zeros(int(SR * 0.6))]
     return _wav_bytes(np.concatenate(parts))
+
+
+def _fan(seconds, rms, seed=4):
+    """Low-passed noise, like a PC fan heard by a phone."""
+    rng = np.random.default_rng(seed)
+    noise = np.convolve(rng.normal(0, 1, int(SR * seconds)),
+                        np.ones(8) / 8, mode="same")
+    return noise * rms / float(np.sqrt(np.mean(noise ** 2)))
+
+
+def _square(freq, dur, level):
+    t = np.arange(int(SR * dur)) / SR
+    ramp = np.minimum(1.0, np.minimum(t, dur - t) / 0.005)
+    return level * np.sign(np.sin(2 * math.pi * freq * t)) * ramp
+
+
+def _laid(base, pieces):
+    """`base` with each (start second, samples) piece added in."""
+    out = base.copy()
+    for at, piece in pieces:
+        start = int(at * SR)
+        out[start:start + piece.size] += piece
+    return out
 
 
 def test_read_beeps_counts_sine_and_square():
@@ -352,6 +413,77 @@ def test_read_beeps_counts_sine_and_square():
         assert out["reading"]["pattern"] == "long:1 short:2"
         assert out["reading"]["summary"].startswith("beeps: long x1, short x2")
         assert out["reading"]["source"] == "beep_codes.json"
+
+
+def test_read_beeps_hears_quiet_beeps_over_fan_noise():
+    # A PC speaker 30 cm from a phone with gain control off reaches
+    # about 0.02 of full scale: quiet, with most of the clip silent.
+    spec = catalogue.get("beep_recording")
+    sig = _laid(_fan(12, 0.003), [(2.0, _square(2000, 0.8, 0.02)),
+                                  (3.15, _square(2000, 0.2, 0.02)),
+                                  (3.7, _square(2000, 0.2, 0.02))])
+    out = beeps_mod.read_beeps(_wav_bytes(sig), "audio/wav", spec)
+    assert out["verdict"] == "ok", out
+    assert out["reading"]["pattern"] == "long:1 short:2"
+    from app.eyewitness.readers.voice import MIN_RMS
+    assert out["reading"]["stats"]["rms"] < MIN_RMS <= out["reading"]["stats"]["loudest_rms"]
+
+
+def test_read_beeps_one_short_beep_and_a_held_tone():
+    spec = catalogue.get("beep_recording")
+    one = _laid(_fan(20, 0.003), [(6.0, _square(1500, 0.2, 0.05))])
+    out = beeps_mod.read_beeps(_wav_bytes(one), "audio/wav", spec)
+    assert out["verdict"] == "ok" and out["reading"]["pattern"] == "short:1"
+    held = _laid(_fan(8, 0.003), [(2.0, _square(1500, 3.0, 0.05))])
+    out = beeps_mod.read_beeps(_wav_bytes(held), "audio/wav", spec)
+    assert out["verdict"] == "ok" and out["reading"]["pattern"] == "continuous"
+
+
+def test_read_beeps_refuses_vowel_like_tones():
+    """Pure for a moment is not enough: too short, gliding or pulsing
+    tones are what vowels look like, and none of them counts."""
+    spec = catalogue.get("beep_recording")
+    t_short = np.arange(int(SR * 0.1)) / SR
+    blip = np.sin(2 * math.pi * 600 * t_short) * 0.2
+    t = np.arange(int(SR * 0.3)) / SR
+    glide = np.sin(2 * math.pi * (400 * t + 200 * t ** 2)) * 0.2
+    pulse = np.sin(2 * math.pi * 600 * t) * 0.2 * (0.55 + 0.45 * np.sin(2 * math.pi * 7 * t))
+    for piece in (blip, glide, pulse):
+        sig = _laid(_fan(6, 0.003), [(1.0, piece), (2.0, piece), (3.0, piece)])
+        out = beeps_mod.read_beeps(_wav_bytes(sig), "audio/wav", spec)
+        assert out["retake"]["reason"] == "no_beeps", out["reading"].get("pattern")
+
+
+def test_read_beeps_counts_one_pitch():
+    spec = catalogue.get("beep_recording")
+    sig = _laid(_fan(8, 0.003), [(1.0, _square(1000, 0.25, 0.05)),
+                                 (1.6, _square(1000, 0.25, 0.05)),
+                                 (2.2, _square(1000, 0.25, 0.05)),
+                                 (3.5, _square(1600, 0.25, 0.05))])
+    out = beeps_mod.read_beeps(_wav_bytes(sig), "audio/wav", spec)
+    assert out["reading"]["pattern"] == "short:3"
+    assert {b["hz"] for b in out["reading"]["beeps"]} == {1000}
+
+
+def test_beep_level_check_agrees_with_the_phone():
+    """The phone reads the RMS of 2048 samples every quarter second and
+    holds the loudest reading to MIN_RMS. The server's loudest window
+    is never quieter than the phone's loudest reading, so a recording
+    the phone accepts is never sent back as too quiet."""
+    rate = 48000
+    rng = np.random.default_rng(9)
+    sig = rng.normal(0, 0.001, rate * 10)
+    for at, dur in ((2.0, 0.8), (3.15, 0.2), (3.7, 0.2)):
+        t = np.arange(int(rate * dur)) / rate
+        start = int(at * rate)
+        sig[start:start + t.size] += 0.012 * np.sign(np.sin(2 * math.pi * 2000 * t))
+    phone = max(float(np.sqrt(np.mean(sig[i:i + 2048] ** 2)))
+                for i in range(0, sig.size - 2048, rate // 4))
+    server = beeps_mod.loudest_level(sig, rate)
+    assert server >= 0.95 * phone
+    assert abs(beeps_mod.LEVEL_WINDOW_S - 2048 / 48000) < 0.002
+    js = (ROOT / "app/static/js/eyewitness/capture.js").read_text(encoding="utf-8")
+    assert '"data-raw-audio") === "true" ? peakMax' in js
 
 
 def test_read_beeps_rejects_speech_noise_and_silence():
@@ -431,6 +563,11 @@ def test_wording_fallback_keywords_and_negatives():
     assert items == [] and questions == []
     items, _ = heuristic_templates("blue screen and it keeps crashing")
     assert items[0] == "screen_photo"
+    # Keywords match whole words: monitoring is not a monitor.
+    items, _ = heuristic_templates("Our monitoring alerts keep firing overnight")
+    assert "display_fault" not in items
+    items, _ = heuristic_templates("My monitor says no signal")
+    assert "display_fault" in items
 
 
 def test_templates_payload_adds_reader_lines_and_fields():
@@ -458,3 +595,16 @@ def test_catalogue_check_exit_codes(tmp_path):
     assert bad_result.exit_code == 1
     shown = runner.invoke(catalogue_check_cmd, ["--show"])
     assert shown.exit_code == 0 and "What to look for" in shown.output
+    # A folder outside the shipped one meets the operator rules.
+    extra = tmp_path / "extra"
+    extra.mkdir()
+    _write(extra, _vision_spec(id="screen_photo"), "screen_photo.yaml")
+    clash = runner.invoke(catalogue_check_cmd, [str(extra)])
+    assert clash.exit_code == 1 and "already used" in clash.output
+    coded = _vision_spec(id="coded_thing", reader="photo")
+    for key in ("look_for", "label", "fields", "retake"):
+        del coded[key]
+    (extra / "screen_photo.yaml").unlink()
+    _write(extra, coded, "coded_thing.yaml")
+    refused = runner.invoke(catalogue_check_cmd, [str(extra)])
+    assert refused.exit_code == 1 and "may only use reader vision" in refused.output

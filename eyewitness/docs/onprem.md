@@ -154,5 +154,5 @@ Vision templates from the catalogue read on Glimmer too. The
 generic vision reader takes the same client as the screen reader,
 so a photo for a printer test page, a display fault or router
 lights stays on the tenant network for a local tenant. Beep
-recordings need no model at all. Code counts the tonal segments
-and looks the pattern up, on either backend.
+recordings need no model at all. Code counts the steady tones and
+looks the pattern up, on either backend.

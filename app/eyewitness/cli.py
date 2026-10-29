@@ -121,7 +121,9 @@ def catalogue_check_cmd(path, show):
     import json as _json
     from app.eyewitness import catalogue as _cat
     if path:
-        entries = [(path, False)]
+        # A path outside the shipped folder is an operator file or
+        # folder, so it meets the operator rules it will meet at load.
+        entries = [(path, not _cat.is_built_in_path(path))]
     else:
         entries = [(_cat._built_in_dir(), False)]
         op = os.environ.get("EYEWITNESS_CATALOGUE_DIR") or ""

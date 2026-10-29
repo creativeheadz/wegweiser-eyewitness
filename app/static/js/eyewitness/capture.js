@@ -282,8 +282,10 @@
         var limit = (maxSeconds || VOICE_MAX_SECONDS) * 1000;
         recVoice.hidden = true; if (stopVoice) stopVoice.hidden = false;
         // Level check held with the server: the mean level over the
-        // note must reach VOICE_MIN_RMS or the server asks again.
-        var actx = null, peakSum = 0, peakCount = 0, analyser = null;
+        // note must reach VOICE_MIN_RMS or the server asks again. A raw
+        // recording (beeps) is mostly silence between tones, so there
+        // the loudest reading must reach it, as readers/beeps.py checks.
+        var actx = null, peakSum = 0, peakCount = 0, peakMax = 0, analyser = null;
         try {
           actx = new (window.AudioContext || window.webkitAudioContext)();
           analyser = actx.createAnalyser();
@@ -297,7 +299,9 @@
             analyser.getFloatTimeDomainData(buf);
             var sum = 0;
             for (var i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-            peakSum += Math.sqrt(sum / buf.length); peakCount += 1;
+            var level = Math.sqrt(sum / buf.length);
+            peakSum += level; peakCount += 1;
+            if (level > peakMax) peakMax = level;
           }
           if (Date.now() - started >= limit && rec.state !== "inactive") rec.stop();
         }, 250);
@@ -314,7 +318,8 @@
           var tooShort = li.getAttribute("data-too-short") || TOO_SHORT_VOICE;
           var tooQuiet = li.getAttribute("data-too-quiet") || TOO_QUIET_VOICE;
           if (seconds < VOICE_MIN_SECONDS) { status.textContent = tooShort; return; }
-          if (peakCount && (peakSum / peakCount) < VOICE_MIN_RMS) { status.textContent = tooQuiet; return; }
+          var heard = li.getAttribute("data-raw-audio") === "true" ? peakMax : (peakCount ? peakSum / peakCount : 0);
+          if (peakCount && heard < VOICE_MIN_RMS) { status.textContent = tooQuiet; return; }
           var type = rec.mimeType || "";
           uploadAndPoll(itemId, blob, type.indexOf("mp4") >= 0 || type.indexOf("m4a") >= 0 ? "voice.m4a" : "voice.webm", status, li);
         };

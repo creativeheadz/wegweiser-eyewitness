@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 
@@ -115,10 +116,14 @@ def heuristic_templates(ticket_text: str) -> tuple[list[str], list[str]]:
                                                    "not booting",
                                                    "no power")):
         items.append("whole_device")
+    # Catalogue keywords match whole words only, so "monitor" never
+    # picks up a ticket about monitoring.
     from app.eyewitness import catalogue as _cat
     for spec in _cat.all_specs():
         for phrase in spec.get("keywords") or []:
-            if phrase in text and spec["id"] not in items:
+            if spec["id"] not in items and re.search(
+                    r"(?<![a-z0-9])" + re.escape(phrase) + r"(?![a-z0-9])",
+                    text):
                 items.append(spec["id"])
                 break
         if len(items) >= 4:

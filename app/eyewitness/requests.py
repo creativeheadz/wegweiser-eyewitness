@@ -54,19 +54,17 @@ def make_item(template: str, *, custom_text: str | None = None,
             "title": spec["title"], "instruction": spec["instruction"],
             "max_seconds": spec["max_seconds"], "custom": False,
             "open_until": open_until}
+    # Only templates that define these get them, so items for the
+    # older templates keep exactly the keys they always had.
     if full is not None:
         if full.get("record_label"):
             item["record_label"] = full["record_label"]
         retake = full.get("retake") or {}
         advice = {k: retake[k] for k in ("too_short", "too_quiet")
-                  if k in retake}
+                  if retake.get(k)}
         if advice:
             item["phone_advice"] = advice
         if full.get("reader") == "beeps":
-            item["phone_advice"] = item.get("phone_advice") or {
-                "too_short": (retake.get("too_short") or ""),
-                "too_quiet": (retake.get("too_quiet") or "")}
-            item["phone_advice"] = {k: v for k, v in item["phone_advice"].items() if v}
             item["raw_audio"] = True
     return item
 

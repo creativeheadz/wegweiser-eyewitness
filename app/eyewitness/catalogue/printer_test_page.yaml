@@ -6,7 +6,7 @@ instruction: "Print a test page from the printer's own menu. Lay it flat in good
 ask_when: "The ticket describes poor print quality: streaks, lines, faded or patchy print, smudges, missing colours or blank pages."
 keywords: [streak, streaks, faded print, smudge, print quality, blank page, lines on the page, missing colour]
 reader: vision
-look_for: "A printed page, ideally the printer's own test or configuration page. Look for print defects: streaks or lines running down the page, bands across it, faded or patchy areas, smudges, a ghost of the image repeated lower down, a colour missing from the colour blocks, skew, or a blank page. Read the printer model, the page count and any toner or ink levels printed on the page."
+look_for: "A printed page, ideally the printer's own test or configuration page. Look for print defects: streaks or lines running down the page, bands across it, faded or patchy areas, smudges, a ghost of the image repeated lower down, a colour block that is missing or much paler than a full-strength print of that colour, skew, or a blank page. Read the printer model, the page count and any toner or ink levels printed on the page."
 label: "test page"
 fields:
   - name: defects
@@ -16,7 +16,7 @@ fields:
     in_summary: true
   - name: missing_colours
     type: list
-    describe: "Colours that are missing or very faint in the colour blocks."
+    describe: "Colours whose block is missing, or much paler than a full-strength print of that colour."
     choices: [cyan, magenta, yellow, black]
     in_summary: true
   - name: printer_model

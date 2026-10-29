@@ -34,12 +34,17 @@ READER_FOR_KIND = {
     "voice_note": "voice",
     "photo": "photo",
     "sticker": "sticker",
-    "printer_panel": "vision",
-    "printer_test_page": "vision",
-    "display_fault": "vision",
-    "network_lights": "vision",
-    "beep_recording": "beeps",
 }
+
+
+def _reader_for(kind: str) -> str:
+    """The fixed table first, then the template's catalogue reader."""
+    if kind in READER_FOR_KIND:
+        return READER_FOR_KIND[kind]
+    from app.eyewitness import catalogue as _cat
+    spec = _cat.get(kind) or {}
+    return spec.get("reader") if spec.get("reader") in ("vision", "beeps") \
+        else "screen"
 
 
 def _load_manifest(folder: Path) -> list[dict]:
@@ -168,7 +173,7 @@ def _check(item: dict, result: dict) -> tuple[bool, list[str]]:
 
 def _run_one(item: dict, client) -> dict:
     kind = item.get("kind") or ""
-    reader = READER_FOR_KIND.get(kind, "screen")
+    reader = _reader_for(kind)
     path = Path(item["_path"])
     if not path.exists():
         return {"file": item["file"], "kind": kind, "reader": reader,
@@ -270,6 +275,11 @@ def _detail_table(rows: list[dict]) -> str:
         elif row["reader"] == "voice":
             transcript = str(reading.get("transcript") or "")[:60]
             detail = transcript.replace("|", " ")
+        elif row.get("verdict") == "retake":
+            # A negative case: name the reason and the template the
+            # file was sent as, since one file can serve two rows.
+            detail = (f"retake {(row.get('retake') or {}).get('reason') or ''}"
+                      f", sent as {row.get('kind')}")
         else:
             detail = str(reading.get("summary") or row.get("verdict") or "")
         detail = detail.replace("\n", " ")[:90]
