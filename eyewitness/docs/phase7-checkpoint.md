@@ -85,11 +85,11 @@ ssh <staging host> 'cd <app folder> && venv/bin/flask create-api-key --tenant <t
 EYEWITNESS_API_KEY=<printed key> venv/bin/python eyewitness/tools/e2e_staging.py --scenario catalogue --catalogue-media <folder> --base-url <staging base url> --tenant <tenant uuid>
 ```
 
-## Gaps carried forward
+## Gaps carried forward (all three closed in the review below)
 
-- The `catalogue` scenario still needs its first staging run. It needs staging deployed with the restart above, an Evidence API key, and the synthetic media folder beside the checkout that runs it.
-- `printer_panel` has no synthetic panel photo of its own. Its live Meta check ran on the router photo and returned the `not_found` retake, which is the wording a wrong photo gets. A panel photo would complete the set.
-- The evaluation demo folder started empty in this run, so the run paid $0.1306 in full. A second run over the same files reads the cache at no cost.
+- The `catalogue` scenario still needs its first staging run. It needs staging deployed with the restart above, an Evidence API key, and the synthetic media folder beside the checkout that runs it. Closed: the first run passed all 19 steps.
+- `printer_panel` has no synthetic panel photo of its own. Its live Meta check ran on the router photo and returned the `not_found` retake, which is the wording a wrong photo gets. A panel photo would complete the set. Closed: a synthetic panel photo now reads as a paper jam with its code, on staging and in the evaluation.
+- The evaluation demo folder started empty in this run, so the run paid $0.1306 in full. A second run over the same files reads the cache at no cost. Closed: the review ran it once more on an empty cache for honest costs, then kept that cache, so later runs are free.
 
 ## Review by Claude Code (29 Oct 2026)
 
