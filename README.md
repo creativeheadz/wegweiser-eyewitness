@@ -180,7 +180,9 @@ Built for the Meta Global AI Developer Hackathon, 26 Oct to 4 Nov 2026. **Phases
 
 ## Demo
 
-**[Watch the demo video](https://github.com/creativeheadz/wegweiser-eyewitness/releases/download/demo-video/eyewitness-demo.mp4)** (2:33, 1920 by 1080). A cut made for a phone held upright sits beside it on the [release page](https://github.com/creativeheadz/wegweiser-eyewitness/releases/tag/demo-video).
+[![Wegweiser Eyewitness demo video, 2:33](eyewitness/docs/assets/demo-video.webp)](https://youtu.be/fSsAfWAcBeQ)
+
+**[Watch the demo on YouTube](https://youtu.be/fSsAfWAcBeQ)** (2:33). The same film made for a phone held upright is a [YouTube Short](https://youtube.com/shorts/RVLpJj65BbM). Both files can also be downloaded from the [release page](https://github.com/creativeheadz/wegweiser-eyewitness/releases/tag/demo-video).
 
 The product shots are stills from one run of the story on a staging server, with demo data only. Shots marked NEW show what was built during the event, and shots marked EXISTING WEGWEISER show what was there before it. The narration comes from ElevenLabs and the cut is edited in Remotion.
 
