@@ -92,7 +92,7 @@ sequenceDiagram
 
 <img src="eyewitness/docs/assets/readme-sam.webp" alt="SAM 3.1 tracking the power light on a PC in a video, with a magnified view of the light, a timeline of the flashes counted in code, and the result: Dell power light code, two amber and three white, memory not detected." width="100%">
 
-Eyewitness uses four Meta models, each for one job. A capture reaches a paid model only after it passes a free quality check, and counting is left to code.
+Eyewitness uses four Meta models in the cloud, each for one job, and Meta's open-weights Muse Glimmer for teams that keep evidence on their own hardware. A capture reaches a model only after it passes a free quality check, and counting is left to code.
 
 | Model | Its job in Eyewitness | Measured |
 |---|---|---|
@@ -100,6 +100,7 @@ Eyewitness uses four Meta models, each for one job. A capture reaches a paid mod
 | **SAM 3.1**<br>`sam-3.1` | Follows a blinking light through a clip from a point prompt, and finds screens and labels in photos | A 12 second clip of 120 frames cost $0.024, and code counted two amber flashes and three white |
 | **Muse Voice Transcribe**<br>`muse-voice-transcribe-1.0` | Voice notes in 25 languages, for a customer who can't take a photo | About $0.0025 a note, with Spark's summary |
 | **Muse Image**<br>`muse-image-1.0` | The illustrated panels in the film, and guide photos marked up for a customer once a technician approves them | $0.01 an image |
+| **Muse Glimmer**<br>`muse-glimmer`, open weights | Every read for a tenant that keeps evidence on its own network: the intake, screens, labels and the light's keyframes | 65 s for the crash screen on an 8 GB RTX 3050, at no cost |
 
 A whole ticket, with an intake read, a screen photo, a light video and a voice note, came to **$0.0357** in the evaluation. Every call is cached and its cost logged in dollars. A daily cap, $5 by default, stops spending if something loops.
 
@@ -111,6 +112,25 @@ A whole ticket, with an intake read, a screen photo, a light video and a voice n
 The Phase 1 spike spent **$0.0384** of a $1.00 cap, on inputs made on this machine: a blue screen and a sticker drawn with Pillow, and a blink clip made with Pillow and ffmpeg. No customer photo was used. List prices as checked on 26 Oct 2026: Spark $1.25 and $4.25 per million input and output tokens, SAM 3.1 $2.50 per 1,000 images and $0.20 per 1,000 video frames (50 frames at least), Voice Transcribe $0.18 an hour, Muse Image $0.01 an image. SAM's concept prompts alone did not find the small light again from run to run, so a point prompt on the spot that code finds does the tracking. Full scores are in [the evaluation note](eyewitness/docs/eval.md).
 
 </details>
+
+## On your own hardware
+
+<img src="eyewitness/docs/assets/readme-local.webp" alt="The settings choice Your own hardware (Muse Glimmer) selected, the technician panel with Read on your hardware by Muse Glimmer in 51 s and in 1 min 5 s, and the phone page saying: Checking this on your support company's own server. It can take a couple of minutes." width="100%">
+
+Some support companies can't let a customer's photos leave their own network. In the technician settings, a tenant can move every read to Muse Glimmer, Meta's open-weights model (27.9B, Apache 2.0), on a server the company runs itself. Any OpenAI-compatible host will do: Ollama, llama.cpp, vLLM or a partner.
+
+- **Nothing falls back to the cloud.** For a tenant on its own hardware, no evidence and no ticket text reaches the Meta Model API, even when the local server is down. The capture is then kept for the technician, and a test holds that line for the intake and every reader.
+- **Code finds the light, and voice stays as audio.** SAM runs only in the cloud, so code finds the blinking light and counts it, and Glimmer describes three keyframes. Glimmer takes no audio, so a voice note is kept for the technician to hear.
+
+Measured on staging with a fresh ticket, with Glimmer on a desktop with an 8 GB RTX 3050 and a Ryzen 5 5600X:
+
+| Read on Muse Glimmer | Time | Cost |
+|---|---|---|
+| The intake's decision on the ticket | 71 s | $0 |
+| The power light video, with its keyframes described | 52 s | $0 |
+| The photo of the crash screen, with `MEMORY_MANAGEMENT (0x1A)` read | 65 s | $0 |
+
+The phone page tells the customer the check runs on their support company's own server, and waits for it. Setup for Ollama, llama.cpp and vLLM is in [the on-prem guide](eyewitness/docs/onprem.md).
 
 ## Security by design
 
@@ -145,7 +165,7 @@ Zendesk, Freshdesk, HaloPSA and ConnectWise are next, as connectors with the sam
 
 Everything in this repo was built between 26 October and 4 November 2026 for the Meta Global AI Developer Hackathon. Wegweiser itself, the monitoring platform with its helpdesk connector and triage, existed before the event and stays private.
 
-Seven end-to-end scenarios pass on a staging server with live Meta calls: a ticket by email, a ticket from the help button, a ticket pushed by the Zammad webhook, a request through the Evidence API, a blinking-light video, a voice note, and a sticky note that tries to instruct the AI. The media for the last three were made for the test and are marked synthetic.
+Eight end-to-end scenarios pass on a staging server with live model calls: a ticket by email, a ticket from the help button, a ticket pushed by the Zammad webhook, a request through the Evidence API, a blinking-light video, a voice note, a sticky note that tries to instruct the AI, and a ticket read on the tenant's own hardware by Muse Glimmer. The media for the blinking light, the voice note and the sticky note were made for the test and are marked synthetic.
 
 | Part | Built and tested |
 |---|---|
@@ -155,8 +175,9 @@ Seven end-to-end scenarios pass on a staging server with live Meta calls: a tick
 | Ticket notes | An internal note with fenced readings, injection flags and the Meta cost per ticket, and a customer note built from templates, both posted as HTML |
 | Helpdesks | Zammad built, with a signed push webhook and the poll as its fallback. Zendesk, Freshdesk, HaloPSA and ConnectWise as documented stubs |
 | Connectivity | Evidence API v1 with per-tenant keys, scopes and signed callbacks. The MCP server, and a Spark agent that works through it |
+| Own hardware | A per-tenant choice to read with Muse Glimmer on the company's own server, through any OpenAI-compatible host, with no fallback to the cloud |
 | Safety | The outgoing filter, the untrusted fence, upload sniffing, expiring scoped links, rate limits, a daily cost cap and a retention sweep for capture files |
-| Tests | 94 tests with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` for the staging scenarios |
+| Tests | 118 tests with no database and no paid calls, plus `eyewitness/tools/e2e_staging.py` for the staging scenarios |
 
 <details>
 <summary><strong>The five phases</strong></summary>
@@ -167,6 +188,7 @@ Seven end-to-end scenarios pass on a staging server with live Meta calls: a tick
 - **Phase 4 (done, 28 Oct 2026):** the reader evaluation over the golden set and the synthetic set, the phone page working one step at a time, and the demo kit.
 - **Phase 5 (done, 28 Oct 2026):** the connectivity layer: a signed Zammad push webhook, the Evidence API with keys and signed callbacks, and an MCP server that a Muse Spark agent works through.
 - **Polish (29 Oct 2026):** the phone page in Wegweiser's own style, the ticket notes set out as HTML, and the demo film.
+- **Phase 6 (done, 29 Oct 2026):** readers on the tenant's own hardware with Muse Glimmer, Meta's open-weights model.
 
 </details>
 
@@ -180,7 +202,7 @@ The six panels in the film were drawn by Muse Image (`muse-image-1.0`) at one ce
 
 - Zendesk, Freshdesk, HaloPSA and ConnectWise connectors, on the same connector shape that Zammad uses.
 - Live video assist, for a capture that needs a person at both ends.
-- Readers that run on the support company's side, with no call out.
+- Voice notes and light tracking on the support company's own hardware too, with an open transcription model and SAM's open weights, so a tenant on its own hardware loses nothing.
 - Evidence scores across clients, so a team can see which requests come back unusable.
 
 ## Architecture
@@ -205,10 +227,11 @@ On publishing, `eyewitness/README.md` becomes this repo's root `README.md` and `
 ├── app/static/js/eyewitness/        # capture flow and panel behaviour
 ├── app/static/css/eyewitness/       # the phone page in Wegweiser's paper theme
 ├── migrations/versions/             # eyewitness_20261027, eyewitness_retention_20261028,
-│                                    # eyewitness_api_20261029
-├── tests/eyewitness/                # 94 tests: no database, no paid calls
+│                                    # eyewitness_api_20261029, eyewitness_onprem_20261029
+├── tests/eyewitness/                # 118 tests: no database, no paid calls
 └── eyewitness/
-    ├── docs/                        # architecture, integration, connectors, API, evaluation
+    ├── docs/                        # architecture, integration, connectors, API, evaluation,
+    │                                # the on-prem guide and its Modelfile
     │   └── assets/                  # the images on this page
     ├── mcp/                         # the MCP server and the Muse Spark agent demo
     ├── demo/                        # storyboard, panel prompts, overlays, recorders
@@ -219,7 +242,7 @@ Run the tests from a Wegweiser checkout with its dependencies installed:
 
 ```bash
 python -m pytest tests/eyewitness -q
-# 94 passed
+# 118 passed
 ```
 
 ## Credits
