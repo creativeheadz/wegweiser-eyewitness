@@ -43,7 +43,9 @@ is nowhere to send the reads before that.
   readers take the degraded path they already had: the capture is
   kept on the ticket, the technician reads it, and the request
   completes. The intake treats the ticket as it does with no key
-  configured and releases it to the governor.
+  configured and releases it to the governor. When the tenant setting
+  itself can't be read, no model is called at all, for the same
+  reason.
 - **No transcription for voice notes.** Glimmer takes no audio and
   Voice Transcribe runs only in the cloud. The audio stays on the
   server, the reading says the note is kept for the technician to
