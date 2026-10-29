@@ -240,6 +240,32 @@ def test_reader_client_follows_the_tenant_setting(monkeypatch):
     assert client_mod.tenant_reader_backend(None) == "meta"
 
 
+def test_unreadable_setting_fails_closed(monkeypatch):
+    """A lookup that fails sends nothing anywhere: the client is not
+    configured, so readers keep the capture and no model is called."""
+    from app.eyewitness.meta import client as client_mod
+    from app.eyewitness.meta import local as local_mod
+    called = []
+    monkeypatch.setattr(client_mod, "db_bound_client",
+                        lambda: called.append("meta") or object())
+    monkeypatch.setattr(local_mod, "db_bound_local_client",
+                        lambda: called.append("local") or object())
+
+    class _Session:
+        @staticmethod
+        def get(*args, **kwargs):
+            raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr("app.models.db", SimpleNamespace(session=_Session()))
+    assert client_mod.tenant_reader_backend(uuid.uuid4()) == "unknown"
+    client = client_mod.reader_client(uuid.uuid4())
+    assert isinstance(client, LocalClient)
+    assert not client.is_configured
+    assert called == []
+    with pytest.raises(Exception):
+        client.spark_json(system="s", user_content=[], schema={})
+
+
 # ── media helpers for the reader tests ──────────────────────────────
 
 def _white_jpeg():
@@ -538,8 +564,8 @@ def test_phone_wait_comes_from_the_server():
         encoding="utf-8")
     assert 'data-read-wait="{{ read_wait or 300 }}"' in html
     assert "data-read-wait-message" in html
-    assert ("Checking your photo on your support company's own server. "
-            "This can take a couple of minutes.") in html
+    assert ("Checking this on your support company's own server. "
+            "It can take a couple of minutes.") in html
     js = (ROOT / "app/static/js/eyewitness/capture.js").read_text(
         encoding="utf-8")
     assert 'querySelector("[data-read-wait]")' in js

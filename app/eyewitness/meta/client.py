@@ -452,11 +452,13 @@ def db_bound_client() -> MetaClient:
 
 
 def tenant_reader_backend(tenant_uuid) -> str:
-    """``local`` or ``meta`` for one tenant (Phase 6).
+    """``local``, ``meta`` or ``unknown`` for one tenant (Phase 6).
 
-    Absence of a settings row, a missing table, or no app context all
-    mean ``meta``: the setting is opt-in per tenant and nothing may
-    switch a tenant to the local server by accident.
+    No settings row means ``meta``: the setting is opt-in per tenant.
+    When the setting can't be read at all, the answer is ``unknown``
+    and the caller makes no model call, because a tenant that chose
+    its own hardware must never reach the cloud through a failed
+    lookup.
     """
     if tenant_uuid is None:
         return "meta"
@@ -469,10 +471,11 @@ def tenant_reader_backend(tenant_uuid) -> str:
         except (ValueError, AttributeError):
             key = tenant_uuid
         row = db.session.get(TenantSettings, key)
-        if row is not None and getattr(row, "reader_backend", "meta") == "local":
-            return "local"
     except Exception:
-        return "meta"
+        logger.exception("eyewitness: reader setting unreadable for a tenant")
+        return "unknown"
+    if row is not None and getattr(row, "reader_backend", "meta") == "local":
+        return "local"
     return "meta"
 
 
@@ -484,7 +487,13 @@ def reader_client(tenant_uuid=None):
     LocalClient and nothing else: there is no fallback to the Meta
     Model API, even when the local server is down.
     """
-    if tenant_reader_backend(tenant_uuid) == "local":
+    backend = tenant_reader_backend(tenant_uuid)
+    if backend == "local":
         from .local import db_bound_local_client
         return db_bound_local_client()
+    if backend == "unknown":
+        # Not configured: the readers keep the capture for the
+        # technician and the intake releases the ticket unchanged.
+        from .local import LocalClient
+        return LocalClient(base_url="")
     return db_bound_client()
