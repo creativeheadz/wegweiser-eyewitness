@@ -161,7 +161,8 @@ def _verdict_from_reading(raw: dict, codes: list[str], quality: dict,
 
 
 def read_sticker(data: bytes, *, known_serials=None, client=None,
-                 capture_id=None, intake_run_id=None) -> dict:
+                 capture_id=None, intake_run_id=None,
+                 tenant_uuid=None) -> dict:
     """{verdict, retake, reading, injection_flag} (reader contract)."""
     check = assess_image(data)
     if check["verdict"] == "retake":
@@ -172,9 +173,9 @@ def read_sticker(data: bytes, *, known_serials=None, client=None,
     from .screen import _image_part, decode_codes
     codes = decode_codes(data)
     if client is None:
-        from app.eyewitness.meta.client import db_bound_client
+        from app.eyewitness.meta.client import reader_client
         try:
-            client = db_bound_client()
+            client = reader_client(tenant_uuid)
         except Exception:
             client = None
         if client is not None and not client.is_configured:

@@ -97,10 +97,17 @@ def customer_page(token):
     caps = (Capture.query.filter_by(request_id=row.id)
             .order_by(Capture.created_at.asc(), Capture.id.asc()).all())
     item_states = item_done_states(row.items or [], caps)
+    from app.eyewitness.meta.client import tenant_reader_backend
+    reader_backend = tenant_reader_backend(row.tenant_uuid)
+    # A local read takes a minute or two. The page waits longer
+    # before it gives up, and says where the check happens.
+    read_wait = 600 if reader_backend == "local" else 300
     return render_template("eyewitness/customer.html", row=row,
                            guides=guides, item_states=item_states,
                            msp_name=msp_name, msp_logo_url=msp_logo_url,
-                           next_time_days=next_time_days, token=token)
+                           next_time_days=next_time_days, token=token,
+                           reader_backend=reader_backend,
+                           read_wait=read_wait)
 
 
 @eyewitness_bp.route("/eyewitness/<token>/upload", methods=["POST"])
@@ -358,6 +365,21 @@ def panel(ticket_id):
                   .order_by(Capture.created_at.asc(), Capture.id.asc())
                   .all()):
             latest[(c.request_id, c.item_id)] = c
+        # Where each reading was made and how long it took, from the
+        # call log. The newest call for a capture names its reading.
+        from app.eyewitness.models import MetaCall
+        from app.eyewitness.summary import read_provenance
+        provenance = {}
+        cap_ids = [c.id for c in latest.values()]
+        if cap_ids:
+            for call in (MetaCall.query.filter(
+                    MetaCall.capture_id.in_(cap_ids))
+                    .order_by(MetaCall.created_at.desc(),
+                              MetaCall.id.desc()).all()):
+                provenance.setdefault(call.capture_id,
+                                      read_provenance(call))
+        from app.eyewitness.meta.client import tenant_reader_backend
+        reader_backend = tenant_reader_backend(rec.tenant_uuid)
         from app.utilities.absolute_url import absolute_url
         links = {}
         qr = {}
@@ -376,7 +398,9 @@ def panel(ticket_id):
             qr = {}
         return render_template("eyewitness/panel.html", rec=rec, reqs=reqs,
                                caps=caps, runs=runs, latest=latest,
-                               meta_usd=cost, links=links, qr=qr)
+                               meta_usd=cost, links=links, qr=qr,
+                               provenance=provenance,
+                               reader_backend=reader_backend)
     return _view()
 
 
@@ -574,8 +598,8 @@ def make_guide_request(ticket_id):
         style = request.form.get("style") or "circle"
         client = None
         try:
-            from app.eyewitness.meta.client import db_bound_client
-            client = db_bound_client()
+            from app.eyewitness.meta.client import reader_client
+            client = reader_client(rec.tenant_uuid)
         except Exception:
             client = None
         from app.eyewitness.readers.guide import make_guide

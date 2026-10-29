@@ -332,10 +332,10 @@ def assess_run(run_id: int, base_url: str = "") -> dict:
         db.session.commit()
         return {"failed": "ticket gone"}
 
-    from app.eyewitness.meta.client import db_bound_client
-    client = db_bound_client()
+    from app.eyewitness.meta.client import reader_client
+    client = reader_client(rec.tenant_uuid)
     if not client.is_configured:
-        logger.warning("eyewitness: Meta key not configured, "
+        logger.warning("eyewitness: reader not configured, "
                        "ticket %s released unchanged", rec.id)
         run.status = RUN_NO_REQUEST
         db.session.commit()
@@ -371,7 +371,8 @@ def assess_run(run_id: int, base_url: str = "") -> dict:
         return {"released": "intake failed"}
 
     data = validate_intake_output(raw)
-    run.model = os.environ.get("EYEWITNESS_SPARK_MODEL", "muse-spark-1.3")
+    run.model = getattr(client, "model_name", None) or os.environ.get(
+        "EYEWITNESS_SPARK_MODEL", "muse-spark-1.3")
     if data is None:
         run.status = RUN_NO_REQUEST
         run.error = "invalid intake output"
@@ -578,12 +579,16 @@ def release_run(run_id) -> bool:
             captures = _captures_as_dicts(req_row)
             missing = ((run.assessment or {}).get("missing") or [])
             meta_usd = _ticket_meta_usd(run, req_row)
+            from app.eyewitness.meta.client import tenant_reader_backend
+            backend = tenant_reader_backend(run.tenant_uuid)
             body = build_summary(
                 {"items": req_row.items or []}, captures,
-                device_label=label, meta_usd=meta_usd, missing=missing)
+                device_label=label, meta_usd=meta_usd, missing=missing,
+                reader_backend=backend)
             body_html = build_summary_html(
                 {"items": req_row.items or []}, captures,
-                device_label=label, meta_usd=meta_usd, missing=missing)
+                device_label=label, meta_usd=meta_usd, missing=missing,
+                reader_backend=backend)
             from app.eyewitness.connectors.zammad import ZammadConnector
             connector, _reason = ZammadConnector.for_tenant(
                 rec.tenant_uuid)
@@ -668,12 +673,16 @@ def post_followup(capture_id: int) -> bool:
                 "kind": cap.kind, "status": cap.status,
                 "reading": cap.reading, "injection_flag": cap.injection_flag}]
         lead = "Follow-up capture after the ticket was handed on."
+        from app.eyewitness.meta.client import tenant_reader_backend
+        backend = tenant_reader_backend(req_row.tenant_uuid)
         body = lead + "\n" + build_summary(
             {"items": req_row.items or []}, one,
-            device_label="see ticket", meta_usd=0.0)
+            device_label="see ticket", meta_usd=0.0,
+            reader_backend=backend)
         body_html = build_summary_html(
             {"items": req_row.items or []}, one,
-            device_label="see ticket", meta_usd=0.0, lead=lead)
+            device_label="see ticket", meta_usd=0.0, lead=lead,
+            reader_backend=backend)
         from app.eyewitness.connectors.zammad import ZammadConnector
         connector, _reason = ZammadConnector.for_tenant(rec.tenant_uuid)
         if connector is None:

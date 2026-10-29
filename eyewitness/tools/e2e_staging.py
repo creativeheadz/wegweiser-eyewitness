@@ -13,8 +13,9 @@ Scenarios: email (the Phase 2 flow, the default), help (the help
 button path with a next-time item and a follow-up capture), video
 (the Dell blink clip), voice (skip everything, then a voice note),
 injection (the sticky note photo), webhook (a ticket created in
-Zammad arrives by push, with no poll in the scenario) and api (the
-Evidence API with a tenant key). Media paths come in as
+Zammad arrives by push, with no poll in the scenario), api (the
+Evidence API with a tenant key) and local (Phase 6: the tenant reads
+on its own hardware with Muse Glimmer). Media paths come in as
 arguments. One PASS or FAIL line prints per step. The script prints
 no secrets and no evidence tokens. Zammad tickets are closed at the
 end; the Wegweiser rows stay as the demo record.
@@ -764,10 +765,99 @@ def scenario_api(stage: Stage) -> None:
          f"http={cancelled.status_code}")
 
 
+def scenario_local(stage: Stage) -> None:
+    """Readers on the tenant's own hardware (Phase 6).
+
+    Sets the demo tenant to ``local``, makes one screen photo request
+    through the Evidence API, uploads the golden photo through the
+    customer page, and waits up to ten minutes for a reading from
+    Muse Glimmer. The tenant goes back to ``meta`` whatever happens.
+    Needs an Evidence API key (--api-key or EYEWITNESS_API_KEY) and
+    the staging app connected to a local server
+    (EYEWITNESS_LOCAL_BASE_URL).
+    """
+    import os
+    args = stage.args
+    from app.eyewitness.models import TenantSettings
+    settings = stage.db.session.get(TenantSettings, stage.tenant_uuid)
+    before = getattr(settings, "reader_backend", "meta") if settings \
+        else "meta"
+    try:
+        if settings is None:
+            settings = TenantSettings(tenant_uuid=stage.tenant_uuid,
+                                      enabled=True,
+                                      auto_send_templates=True,
+                                      reader_backend="local")
+            stage.db.session.add(settings)
+        else:
+            settings.reader_backend = "local"
+        stage.db.session.commit()
+        step("tenant set to local readers", True,
+             f"before={before}")
+        api_key = args.api_key or os.environ.get("EYEWITNESS_API_KEY") or ""
+        if not step("api key supplied", bool(api_key),
+                    "" if api_key else "pass --api-key or set "
+                                       "EYEWITNESS_API_KEY"):
+            return
+        headers = {"Authorization": f"Bearer {api_key}",
+                   "Content-Type": "application/json"}
+        made = stage.http.post(
+            f"{stage.base}/api/eyewitness/v1/requests", headers=headers,
+            json={"templates": ["screen_photo"],
+                  "external_ref": "e2e-local-check"}, timeout=30)
+        created = made.json() if made.status_code == 201 else {}
+        if not step("request created through the Evidence API",
+                    made.status_code == 201 and bool(created.get("id")),
+                    f"http={made.status_code}"):
+            return
+        link = created.get("link") or ""
+        token = link.rstrip("/").split("/")[-1] if link else ""
+        items = created.get("items") or []
+        if not step("screen photo item returned",
+                    bool(token) and bool(items)):
+            return
+        cap_id, code = stage.upload(
+            token, items[0]["id"], args.golden, "crash.png", "image/png")
+        if not step("golden photo uploaded", cap_id is not None,
+                    f"http={code}"):
+            return
+        state = stage.wait_capture(token, cap_id, 600)
+        if not step("local reading returned",
+                    bool(state and state.get("status") == "ok"),
+                    f"status={(state or {}).get('status')}"):
+            return
+        cap = stage.capture_row(cap_id)
+        reading = (cap.reading or {}) if cap else {}
+        step("reading holds the stop code",
+             "MEMORY_MANAGEMENT" in str(reading.get("stop_code") or ""),
+             f"stop_code={reading.get('stop_code')}")
+        from app.eyewitness.models import MetaCall
+        stage.db.session.expire_all()
+        calls = MetaCall.query.filter_by(capture_id=cap_id).all()
+        local_model = os.environ.get("EYEWITNESS_LOCAL_MODEL",
+                                     "eyewitness-glimmer")
+        step("call log shows the local read at no cost",
+             bool(calls)
+             and all(float(c.usd or 0) == 0.0 for c in calls)
+             and any(c.kind == "local" and c.model == local_model
+                     for c in calls),
+             f"calls={[(c.kind, c.model, c.usd, c.ms) for c in calls]}")
+    finally:
+        try:
+            stage.db.session.expire_all()
+            row = stage.db.session.get(TenantSettings, stage.tenant_uuid)
+            if row is not None:
+                row.reader_backend = "meta"
+                stage.db.session.commit()
+                print("NOTE tenant set back to meta")
+        except Exception as exc:
+            print(f"NOTE tenant restore failed: {str(exc)[:120]}")
+
+
 SCENARIOS = {"email": scenario_email, "help": scenario_help,
              "video": scenario_video, "voice": scenario_voice,
              "injection": scenario_injection, "webhook": scenario_webhook,
-             "api": scenario_api}
+             "api": scenario_api, "local": scenario_local}
 
 
 def main() -> int:
@@ -795,7 +885,8 @@ def main() -> int:
                         help="the managed device for the help scenario")
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
-    if args.scenario in ("email", "help", "webhook") and not args.golden:
+    if args.scenario in ("email", "help", "webhook", "local") \
+            and not args.golden:
         print("FAIL golden image supplied - pass --golden")
         return 1
 

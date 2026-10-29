@@ -534,7 +534,8 @@ def _describe_keyframes(frames, client, capture_id, intake_run_id):
 
 
 def read_video(data: bytes, mime: str | None = None, *, client=None,
-               capture_id=None, intake_run_id=None) -> dict:
+               capture_id=None, intake_run_id=None,
+               tenant_uuid=None) -> dict:
     """Reader contract for one power light clip. The work folder holds
     copies of customer evidence, so it goes when the read ends."""
     import shutil
@@ -543,14 +544,15 @@ def read_video(data: bytes, mime: str | None = None, *, client=None,
     try:
         return _read_video(data, mime, work=work, client=client,
                            capture_id=capture_id,
-                           intake_run_id=intake_run_id)
+                           intake_run_id=intake_run_id,
+                           tenant_uuid=tenant_uuid)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
 def _read_video(data: bytes, mime: str | None = None, *, work: str,
                 client=None, capture_id=None,
-                intake_run_id=None) -> dict:
+                intake_run_id=None, tenant_uuid=None) -> dict:
     """One power light clip, read inside `work`.
 
     Normalise with ffmpeg, then locate the light: one SAM concept
@@ -563,12 +565,17 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
         return _retake("light_not_found")
     if client is None:
         try:
-            from app.eyewitness.meta.client import db_bound_client
-            client = db_bound_client()
+            from app.eyewitness.meta.client import reader_client
+            client = reader_client(tenant_uuid)
         except Exception:
             client = None
     live_client = client if (client is not None
                              and client.is_configured) else None
+    # Local mode has no SAM and no file upload. The code locator
+    # finds the light on its own, code counts, and only the three
+    # keyframes go to Glimmer for the description.
+    sam_client = live_client if (live_client is not None and getattr(
+        live_client, "supports_sam", True)) else None
     src = os.path.join(work, "source.bin")
     norm = os.path.join(work, "normalised.mp4")
     with open(src, "wb") as fh:
@@ -611,18 +618,18 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
     sam_frames: dict = {}
     frame_count = int(round(norm_probe["duration_s"] * 10))
     media_part = None
-    if live_client is not None:
+    if sam_client is not None:
         try:
-            media_part = _sam_media_part(live_client, norm, capture_id,
+            media_part = _sam_media_part(sam_client, norm, capture_id,
                                          intake_run_id)
         except Exception:
             media_part = None
     sam_file_id = (media_part or {}).get("file_id") if media_part else None
 
     def _cleanup_sam_file():
-        if sam_file_id and live_client is not None:
+        if sam_file_id and sam_client is not None:
             try:
-                deleter = getattr(live_client, "delete_file", None)
+                deleter = getattr(sam_client, "delete_file", None)
                 if deleter is not None:
                     deleter(sam_file_id)
             except Exception:
@@ -631,7 +638,7 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
     if media_part is not None:
         from app.eyewitness.meta.sam_parser import union_box
         for concept in CONCEPTS:
-            found = _sam_found(live_client, concept, media_part,
+            found = _sam_found(sam_client, concept, media_part,
                                frame_count, capture_id, intake_run_id)
             box = union_box(found)
             if box is None:
@@ -656,7 +663,7 @@ def _read_video(data: bytes, mime: str | None = None, *, work: str,
              "w": frame_w, "h": frame_h}, frame_w, frame_h)
         if media_part is not None:
             followed = follow_candidate(
-                frames, code_region, client=live_client,
+                frames, code_region, client=sam_client,
                 media_part=media_part, frame_count=frame_count,
                 capture_id=capture_id, intake_run_id=intake_run_id)
             if followed is not None:

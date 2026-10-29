@@ -149,8 +149,8 @@ def api_create_request():
             return jsonify({"error": "ticket_text is required"}), 400
         client = None
         try:
-            from app.eyewitness.meta.client import db_bound_client
-            client = db_bound_client()
+            from app.eyewitness.meta.client import reader_client
+            client = reader_client(key_row.tenant_uuid)
         except Exception:
             client = None
         decision = ew_api.decide_auto(ticket_text, client=client)
@@ -290,9 +290,14 @@ def settings_data():
             return jsonify({"error": "bad tenant"}), 400
         keys = (ApiKey.query.filter_by(tenant_uuid=tenant)
                 .order_by(ApiKey.created_at.desc()).all())
+        from app.eyewitness.meta.client import tenant_reader_backend
+        from app.eyewitness.meta.local import local_base_url, local_model
         return jsonify({
             "hook_url": ew_hook.hook_url_for(tenant),
             "hook_configured": bool(ew_hook.hook_url_for(tenant)),
+            "reader_backend": tenant_reader_backend(tenant),
+            "local_available": bool(local_base_url()),
+            "local_model": local_model(),
             "api_keys": [
                 {"id": k.id, "name": k.name, "prefix": k.key_prefix,
                  "scopes": k.scopes or [], "callback_url": k.callback_url,
@@ -300,6 +305,42 @@ def settings_data():
                  "revoked_at": k.revoked_at,
                  "created_at": k.created_at} for k in keys],
         })
+    return _view()
+
+
+@eyewitness_api_bp.route("/eyewitness/settings/reader-backend",
+                         methods=["POST"])
+def settings_reader_backend():
+    from app.utilities.app_access_login_required import login_required
+
+    @login_required
+    def _view():
+        from flask import session
+        from app.eyewitness.meta.local import local_base_url
+        from app.eyewitness.models import TenantSettings
+        tenant_raw = session.get("tenant_uuid")
+        if not tenant_raw:
+            return jsonify({"error": "no tenant in session"}), 400
+        import uuid as uuid_mod
+        try:
+            tenant = uuid_mod.UUID(str(tenant_raw))
+        except ValueError:
+            return jsonify({"error": "bad tenant"}), 400
+        backend = str(request.form.get("reader_backend") or "meta")
+        if backend not in ("meta", "local"):
+            return jsonify({"error": "choose where readings happen"}), 400
+        if backend == "local" and not local_base_url():
+            return jsonify({"error": "no local server is set up on "
+                                     "this installation"}), 400
+        row = db.session.get(TenantSettings, tenant)
+        if row is None:
+            row = TenantSettings(tenant_uuid=tenant, enabled=False,
+                                 reader_backend=backend)
+            db.session.add(row)
+        else:
+            row.reader_backend = backend
+        db.session.commit()
+        return jsonify({"reader_backend": backend})
     return _view()
 
 

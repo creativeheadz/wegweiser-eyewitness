@@ -1,0 +1,6 @@
+# Muse Glimmer for Eyewitness reads: a 12K context is enough for a photo
+# or three video keyframes plus the prompt, and a low temperature keeps
+# structured reads steady. Shares the muse-glimmer weights on disk.
+FROM muse-glimmer
+PARAMETER num_ctx 12288
+PARAMETER temperature 0.2

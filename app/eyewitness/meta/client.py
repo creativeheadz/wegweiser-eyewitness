@@ -63,6 +63,10 @@ class MetaClient:
     bound to eyewitness_meta_calls / eyewitness_meta_cache.
     """
 
+    backend = "meta"
+    supports_sam = True
+    supports_transcribe = True
+
     def __init__(self, key: str | None = None, *, log_call=None,
                  cache_get=None, cache_put=None, spent_today=None):
         self._key = api_key() if key is None else key
@@ -75,6 +79,10 @@ class MetaClient:
     @property
     def is_configured(self) -> bool:
         return bool(self._key)
+
+    @property
+    def model_name(self) -> str:
+        return os.environ.get("EYEWITNESS_SPARK_MODEL", DEFAULT_SPARK_MODEL)
 
     def _spent(self) -> float:
         return float(self._spent_today()) if self._spent_today else 0.0
@@ -441,3 +449,42 @@ def db_bound_client() -> MetaClient:
 
     return MetaClient(log_call=_log, cache_get=_get, cache_put=_put,
                       spent_today=_spent)
+
+
+def tenant_reader_backend(tenant_uuid) -> str:
+    """``local`` or ``meta`` for one tenant (Phase 6).
+
+    Absence of a settings row, a missing table, or no app context all
+    mean ``meta``: the setting is opt-in per tenant and nothing may
+    switch a tenant to the local server by accident.
+    """
+    if tenant_uuid is None:
+        return "meta"
+    try:
+        import uuid as uuid_mod
+        from app.models import db
+        from app.eyewitness.models import TenantSettings
+        try:
+            key = uuid_mod.UUID(str(tenant_uuid))
+        except (ValueError, AttributeError):
+            key = tenant_uuid
+        row = db.session.get(TenantSettings, key)
+        if row is not None and getattr(row, "reader_backend", "meta") == "local":
+            return "local"
+    except Exception:
+        return "meta"
+    return "meta"
+
+
+def reader_client(tenant_uuid=None):
+    """The reader client for one tenant: local, or the Meta client.
+
+    Every call site that handles customer evidence or ticket text
+    takes its client here. A tenant set to ``local`` gets the
+    LocalClient and nothing else: there is no fallback to the Meta
+    Model API, even when the local server is down.
+    """
+    if tenant_reader_backend(tenant_uuid) == "local":
+        from .local import db_bound_local_client
+        return db_bound_local_client()
+    return db_bound_client()

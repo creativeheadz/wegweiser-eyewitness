@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/eyewitness/customer.css') }}">
 </head>
 <body>
-<main class="ew" data-next-time-days="{{ next_time_days }}">
+<main class="ew" data-next-time-days="{{ next_time_days }}" data-read-wait="{{ read_wait or 300 }}">
+  {% if reader_backend == 'local' %}<p class="ew-wait" data-read-wait-message hidden>Checking your photo on your support company's own server. This can take a couple of minutes.</p>{% endif %}
   <header class="ew-head">
     {% if msp_logo_url %}<p class="ew-brand"><img class="ew-logo" src="{{ msp_logo_url }}" alt="{{ msp_name }}"></p>{% endif %}
     <p class="ew-msp">{{ msp_name }}</p>

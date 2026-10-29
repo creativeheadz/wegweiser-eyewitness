@@ -76,31 +76,48 @@ def process_capture(capture_id: int) -> dict:
         item = next((i for i in (req.items or [])
                      if i.get("id") == cap.item_id), None) if req else None
         reader = reader_for((item or {}).get("template"), cap.kind)
+        # The request knows the tenant, so the reader client comes
+        # from the tenant's backend choice. A tenant set to local
+        # never reaches the Meta Model API from here.
+        tenant_uuid = req.tenant_uuid if req else None
+        client = None
+        if tenant_uuid is not None:
+            try:
+                from app.eyewitness.meta.client import reader_client
+                client = reader_client(tenant_uuid)
+            except Exception:
+                client = None
         if reader == "sticker":
             from app.eyewitness.readers.sticker import read_sticker
-            result = read_sticker(data,
+            result = read_sticker(data, client=client,
                                   known_serials=_known_serials_for(cap),
                                   capture_id=cap.id,
                                   intake_run_id=(req.intake_run_id
-                                                 if req else None))
+                                                 if req else None),
+                                  tenant_uuid=tenant_uuid)
         elif reader == "screen":
             from app.eyewitness.readers.screen import read_screen
-            result = read_screen(data, capture_id=cap.id,
+            result = read_screen(data, client=client, capture_id=cap.id,
                                  intake_run_id=(req.intake_run_id
-                                                if req else None))
+                                                if req else None),
+                                 tenant_uuid=tenant_uuid)
         elif reader == "photo":
             from app.eyewitness.readers.quality import read_photo
             result = read_photo(data)
         elif reader == "voice":
             from app.eyewitness.readers.voice import read_voice
-            result = read_voice(data, cap.mime, capture_id=cap.id,
+            result = read_voice(data, cap.mime, client=client,
+                                capture_id=cap.id,
                                 intake_run_id=(req.intake_run_id
-                                               if req else None))
+                                               if req else None),
+                                tenant_uuid=tenant_uuid)
         else:
             from app.eyewitness.readers.video_lights import read_video
-            result = read_video(data, cap.mime, capture_id=cap.id,
+            result = read_video(data, cap.mime, client=client,
+                                capture_id=cap.id,
                                 intake_run_id=(req.intake_run_id
-                                               if req else None))
+                                               if req else None),
+                                tenant_uuid=tenant_uuid)
         cap.reading = result.get("reading")
         cap.retake = result.get("retake")
         cap.injection_flag = bool(result.get("injection_flag"))

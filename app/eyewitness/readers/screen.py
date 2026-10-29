@@ -170,7 +170,7 @@ def _verdict_from_reading(raw: dict, codes: list[str],
 
 
 def read_screen(data: bytes, *, client=None, capture_id=None,
-                intake_run_id=None) -> dict:
+                intake_run_id=None, tenant_uuid=None) -> dict:
     """{verdict, retake, reading, injection_flag} (reader contract)."""
     check = assess_image(data)
     # The black crash screen passes the gate on its bright text. A frame
@@ -182,9 +182,9 @@ def read_screen(data: bytes, *, client=None, capture_id=None,
                 "injection_flag": False}
     codes = decode_codes(data)
     if client is None:
-        from app.eyewitness.meta.client import MetaNotConfigured, db_bound_client
+        from app.eyewitness.meta.client import MetaNotConfigured, reader_client
         try:
-            client = db_bound_client()
+            client = reader_client(tenant_uuid)
         except Exception:
             client = None
         if client is not None and not client.is_configured:

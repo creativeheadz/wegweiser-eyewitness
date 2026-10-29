@@ -114,7 +114,8 @@ def summarise_transcript(transcript: str, raw: dict) -> dict:
 
 
 def read_voice(data: bytes, mime: str | None = None, *, client=None,
-               capture_id=None, intake_run_id=None) -> dict:
+               capture_id=None, intake_run_id=None,
+               tenant_uuid=None) -> dict:
     """Reader contract for one voice note. The work folder holds
     copies of customer evidence, so it goes when the read ends."""
     import shutil
@@ -125,14 +126,15 @@ def read_voice(data: bytes, mime: str | None = None, *, client=None,
     try:
         return _read_voice(data, mime, work=work, client=client,
                            capture_id=capture_id,
-                           intake_run_id=intake_run_id)
+                           intake_run_id=intake_run_id,
+                           tenant_uuid=tenant_uuid)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
 def _read_voice(data: bytes, mime: str | None = None, *, work: str,
                 client=None, capture_id=None,
-                intake_run_id=None) -> dict:
+                intake_run_id=None, tenant_uuid=None) -> dict:
     """One voice note, read inside `work`."""
     try:
         wav_bytes = normalise_to_wav(data, work)
@@ -150,10 +152,22 @@ def _read_voice(data: bytes, mime: str | None = None, *, work: str,
                                 "prompt_version": PROMPT_VERSION})
     if client is None:
         try:
-            from app.eyewitness.meta.client import db_bound_client
-            client = db_bound_client()
+            from app.eyewitness.meta.client import reader_client
+            client = reader_client(tenant_uuid)
         except Exception:
             client = None
+    if client is not None and not getattr(client, "supports_transcribe",
+                                          True):
+        # Local mode: Glimmer takes no audio and Voice Transcribe
+        # runs only in the cloud. The file stays on the server for
+        # the technician to hear. No transcription is made.
+        return {"verdict": "ok", "retake": None,
+                "reading": {"local_only": True, "stats": stats,
+                            "prompt_version": PROMPT_VERSION,
+                            "summary": "Voice note kept for the "
+                                       "technician to listen to. No "
+                                       "transcription was made."},
+                "injection_flag": False}
     if client is None or not client.is_configured:
         return {"verdict": "ok", "retake": None,
                 "reading": {"stub": True, "stats": stats,

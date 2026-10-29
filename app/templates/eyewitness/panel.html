@@ -5,6 +5,9 @@
 <section class="fk-panel hd-panel ew-panel" data-ew-panel data-ticket="{{ rec.id }}">
   <div class="fk-detail-head"><span class="fk-detail-head__title">Eyewitness evidence</span></div>
   <p class="hd-hint">Meta spend on this ticket: ${{ '%.4f'|format(meta_usd) }}</p>
+  {% if reader_backend == 'local' %}
+  <p class="hd-hint">Readings on this ticket happen on your own hardware with Muse Glimmer. Voice notes are kept for you to listen to and are not transcribed.</p>
+  {% endif %}
   {% if not reqs %}
   <p class="hd-hint">No evidence requested yet.</p>
   {% endif %}
@@ -28,6 +31,7 @@
         <span class="fk-pill fk-pill--{{ {'ok': 'ok', 'retake': 'warn', 'failed': 'crit'}.get(cap.status, 'note') }}">{{ {'ok': 'received', 'retake': 'retake asked', 'failed': 'failed', 'skipped': 'skipped', 'processing': 'reading', 'uploaded': 'reading'}.get(cap.status, cap.status) }}</span>
         {% set rd = cap.reading or {} %}
         {% if rd.get('summary') %}<span class="ew-asked__reading">{{ rd.get('summary') }}</span>{% elif rd.get('answer') %}<span class="ew-asked__reading">answer: {{ rd.get('answer') }}</span>{% endif %}
+        {% if provenance and provenance.get(cap.id) %}<span class="ew-asked__reading">{{ provenance.get(cap.id) }}</span>{% endif %}
         {% if cap.injection_flag %}<span class="fk-pill fk-pill--warn">text that looks like instructions to an AI, treated as data</span>{% endif %}
         {% else %}
         <span class="fk-pill fk-pill--note">waiting</span>
@@ -55,6 +59,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset>
       <legend>Draw a guide on an earlier photo</legend>
+      {% if reader_backend == 'local' %}<p class="hd-hint">Guides for this tenant are drawn on this server. Muse Image is not used, because readings stay on your hardware.</p>{% endif %}
       <label>Photo
         <select name="capture_id">
           {% for c in caps %}<option value="{{ c.id }}">Photo {{ c.id }} ({{ c.item_id }})</option>{% endfor %}

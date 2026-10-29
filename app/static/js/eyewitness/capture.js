@@ -108,8 +108,16 @@
     reader.readAsDataURL(file);
   }
 
-  var POLL_TIMEOUT_MS = 5 * 60 * 1000;
+  // The wait comes from the server (data-read-wait, seconds): a
+  // local read takes a minute or two, so the page waits longer
+  // before it gives up. The fixed sentence shown while a local
+  // read runs comes from the template, never from a model.
+  var mainEl = document.querySelector("[data-read-wait]");
+  var READ_WAIT_S = mainEl ? (parseInt(mainEl.getAttribute("data-read-wait") || "0", 10) || 0) : 0;
+  var POLL_TIMEOUT_MS = READ_WAIT_S > 0 ? READ_WAIT_S * 1000 : 5 * 60 * 1000;
   var POLL_TIMEOUT_MESSAGE = "Checking is taking longer than usual. Please try again.";
+  var waitMsgEl = document.querySelector("[data-read-wait-message]");
+  var WAIT_MESSAGE = waitMsgEl ? waitMsgEl.textContent.trim() : "";
 
   function uploadAndPoll(itemId, blob, filename, status, li) {
     status.textContent = "Sending…";
@@ -119,6 +127,7 @@
     post("/upload", { method: "POST", body: fd }).then(function (r) { return r.json(); })
       .then(function (body) {
         if (body.error) { status.textContent = body.error; return; }
+        if (WAIT_MESSAGE) status.textContent = WAIT_MESSAGE;
         var started = Date.now();
         var poll = setInterval(function () {
           if (Date.now() - started >= POLL_TIMEOUT_MS) {

@@ -15,6 +15,49 @@ def _clean(value) -> str:
     return str(value or "").replace("</customer_evidence", "").strip()
 
 
+BACKEND_LINES = {
+    "local": "Readings were made on your hardware by Muse Glimmer.",
+    "meta": "Readings were made by the Meta Model API.",
+}
+
+
+def backend_line(reader_backend) -> str:
+    """One line naming where the readings were made, or empty text."""
+    return BACKEND_LINES.get(str(reader_backend or ""), "")
+
+
+def format_read_duration(ms) -> str:
+    """78 s, 1 min 18 s: how one reading's time reads to a person."""
+    try:
+        seconds = int(round(float(ms or 0) / 1000.0))
+    except (TypeError, ValueError):
+        seconds = 0
+    if seconds < 60:
+        return f"{seconds} s"
+    return f"{seconds // 60} min {seconds % 60} s"
+
+
+def read_provenance(call) -> str:
+    """Where one reading was made and how long it took.
+
+    `call` is a MetaCall row or a dict with kind, ms and cache_hit.
+    A saved read took no time and says so.
+    """
+    if call is None:
+        return ""
+    if isinstance(call, dict):
+        kind, ms, hit = call.get("kind"), call.get("ms"), call.get("cache_hit")
+    else:
+        kind = getattr(call, "kind", None)
+        ms = getattr(call, "ms", None)
+        hit = getattr(call, "cache_hit", None)
+    where = ("on your hardware by Muse Glimmer" if kind == "local"
+             else "by the Meta Model API")
+    if hit:
+        return f"Read {where} from a saved read."
+    return f"Read {where} in {format_read_duration(ms)}."
+
+
 def _line(capture: dict, index: int) -> str:
     reading = capture.get("reading") or {}
     title = _clean(capture.get("item_title") or capture.get("kind")
@@ -44,7 +87,8 @@ def _line(capture: dict, index: int) -> str:
 
 
 def build_summary(request, captures: list[dict], *, device_label: str = "",
-                  meta_usd: float = 0.0, missing=None) -> str:
+                  meta_usd: float = 0.0, missing=None,
+                  reader_backend=None) -> str:
     """Internal note body. `request` is a dict with an items list."""
     items = (request or {}).get("items") or []
     asked = ", ".join(_clean(i.get("title", i.get("template", "")))
@@ -61,10 +105,13 @@ def build_summary(request, captures: list[dict], *, device_label: str = "",
         missing_line = ("\nMissing from the ticket: "
                         + ", ".join(_clean(m).replace("_", " ")
                                     for m in missing) + ".")
+    where = backend_line(reader_backend)
+    where_line = f"{where}\n" if where else ""
     return (f"Eyewitness - evidence for this ticket\n"
             f"Asked for: {asked}{asked_end}{missing_line}\n"
             + wrap_untrusted(lines) + "\n"
-            f"Flags: {flags}. Device: {device_label or 'unknown'}. "
+            + where_line
+            + f"Flags: {flags}. Device: {device_label or 'unknown'}. "
             f"Meta cost: ${meta_usd:.4f}")
 
 
@@ -106,7 +153,8 @@ def _item_html(capture: dict) -> str:
 
 def build_summary_html(request, captures: list[dict], *,
                        device_label: str = "", meta_usd: float = 0.0,
-                       missing=None, lead: str = "") -> str:
+                       missing=None, lead: str = "",
+                       reader_backend=None) -> str:
     """The internal note set out for a technician: the same facts as
     build_summary, in short sections. Every value is escaped, and the
     untrusted fence stays visible around the readings."""
@@ -133,6 +181,9 @@ def build_summary_html(request, captures: list[dict], *,
         out.append("<ol>" + "".join(_item_html(c) for c in captures)
                    + "</ol>")
     out.append(f"<p><code>{_esc(FENCE_CLOSE)}</code></p>")
+    where = backend_line(reader_backend)
+    if where:
+        out.append(f"<p>{_esc(where)}</p>")
     out.append(f"<p><strong>Flags:</strong> {_esc(flags)}<br>"
                f"<strong>Device:</strong> {_esc(device_label or 'unknown')}<br>"
                f"<strong>Meta cost:</strong> ${meta_usd:.4f}</p>")

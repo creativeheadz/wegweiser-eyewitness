@@ -178,6 +178,11 @@ class TenantSettings(db.Model):
     # under eyewitness_webhook_secret:<tenant_uuid> and never here.
     webhook_hook_id = db.Column(db.String(64), nullable=True, unique=True,
                                 index=True)
+    # Phase 6: where this tenant's evidence is read. ``meta`` sends
+    # model calls to the Meta Model API. ``local`` sends them to Muse
+    # Glimmer on the tenant's own hardware and never to the cloud.
+    reader_backend = db.Column(db.String(16), nullable=False, default="meta",
+                               server_default="meta")
     updated_at = db.Column(db.BigInteger, nullable=False, default=_now,
                            onupdate=_now)
 
