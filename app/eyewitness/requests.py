@@ -6,7 +6,9 @@ same ticket wait for a technician (`needs_approval`).
 """
 from __future__ import annotations
 
+import html
 import os
+import re
 import secrets
 import time
 
@@ -103,10 +105,47 @@ def render_customer_text(items: list[dict], link: str, expires_at: int,
             lines.append(f"{LETTERS[n]}. {item['title']}{suffix}")
         else:
             lines.append(f"{LETTERS[n]}. {item['title']}. {item['instruction']}")
-    lines += ["", f"Open this link on your phone: {link}",
+    lines += ["", f"{LINK_LEAD}{link}",
               f"The link works until {expiry}. You can skip anything you "
               "can't do. Thank you."]
     return "\n".join(lines)
+
+
+LINK_LEAD = "Open this link on your phone: "
+
+
+def render_customer_html(text: str, items: list[dict] | None = None) -> str:
+    """The vetted customer text as HTML, for helpdesks that show HTML.
+
+    No wording is added or changed. Every line is escaped and becomes a
+    paragraph, each item's own title is set in bold, and the link line
+    becomes a link to the same address. The outgoing filter has already
+    read this exact text, so the HTML says nothing it did not check.
+    """
+    titles = {LETTERS[n]: str(item.get("title") or "")
+              for n, item in enumerate((items or [])[:len(LETTERS)])}
+    out = []
+    for line in (text or "").splitlines():
+        if line.strip():
+            out.append(_customer_line_html(line, titles))
+    return "\n".join(out)
+
+
+def _customer_line_html(line: str, titles: dict) -> str:
+    esc = html.escape
+    item = re.match(r"^([A-H])\. (.*)$", line)
+    if item:
+        letter, rest = item.group(1), item.group(2)
+        title = titles.get(letter, "")
+        if title and rest.startswith(title):
+            return (f"<p><strong>{esc(letter)}. {esc(title)}</strong>"
+                    f"{esc(rest[len(title):])}</p>")
+    if line.startswith(LINK_LEAD):
+        url = line[len(LINK_LEAD):].strip()
+        if re.fullmatch(r"https?://\S+", url):
+            return (f"<p><strong>{esc(LINK_LEAD.strip())}</strong><br>"
+                    f'<a href="{esc(url, quote=True)}">{esc(url)}</a></p>')
+    return f"<p>{esc(line)}</p>"
 
 
 def new_token() -> str:

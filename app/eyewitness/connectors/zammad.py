@@ -30,16 +30,18 @@ class ZammadConnector(HelpdeskConnector):
     def _html(text: str) -> str:
         return "<br>\n".join(html.escape(line) for line in (text or "").splitlines())
 
-    def post_public_note(self, external_ticket_id: str, text: str) -> dict:
+    def post_public_note(self, external_ticket_id: str, text: str,
+                         html: str | None = None) -> dict:
         out = self._client.append_article(
             external_ticket_id, subject="More information needed",
-            body_html=self._html(text), internal=False)
+            body_html=html or self._html(text), internal=False)
         return {"article_id": out.get("id") if isinstance(out, dict) else None}
 
-    def post_internal_note(self, external_ticket_id: str, text: str) -> dict:
+    def post_internal_note(self, external_ticket_id: str, text: str,
+                           html: str | None = None) -> dict:
         out = self._client.append_article(
             external_ticket_id, subject="Eyewitness evidence",
-            body_html=self._html(text), internal=True)
+            body_html=html or self._html(text), internal=True)
         return {"article_id": out.get("id") if isinstance(out, dict) else None}
 
     def attach_file(self, external_ticket_id: str, filename: str,

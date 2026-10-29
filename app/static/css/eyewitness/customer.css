@@ -1,34 +1,126 @@
-/* Eyewitness customer page: mobile-first, no Wegweiser chrome. */
-.ew { max-width: 42rem; margin: 0 auto; padding: 1rem; font-family: system-ui, sans-serif; line-height: 1.5; color: #1a1a1a; }
-.ew-brand { margin: 0 0 0.25rem; }
-.ew-logo { max-height: 3rem; max-width: 12rem; width: auto; height: auto; display: block; }
-.ew-msp { font-weight: 600; margin: 0.25rem 0 0.5rem; }
-.ew-progress { font-weight: 600; margin: 1rem 0 0.5rem; }
-.ew-step-nav { display: flex; gap: 0.75rem; margin: 0.5rem 0 1rem; }
-.ew-nav-btn { flex: 1 1 0; }
-.ew-items { padding-left: 0; margin: 0; list-style: none; }
-.ew-item { margin-bottom: 1.5rem; }
+/* Eyewitness customer page: mobile-first and self-contained, set in
+   Wegweiser's paper theme (the same tokens as auth.css, light). The MSP's
+   name and logo lead; Wegweiser signs off quietly at the foot. */
+
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/static/fonts/fraunces/fraunces-variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/static/fonts/jetbrains-mono/jetbrains-mono-variable.woff2') format('woff2-variations');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans';
+  src: local('Noto Sans'), local('NotoSans-Regular'), url('/static/fonts/noto-sans/noto-sans-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans';
+  src: local('Noto Sans SemiBold'), local('NotoSans-SemiBold'), url('/static/fonts/noto-sans/noto-sans-600.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  --paper: #efe7d6; --paper-2: #f7f1e3; --paper-3: #fbf6ea;
+  --ink: #1d1810; --ink-2: #4b4534; --muted: #6f6650;
+  --ember: #c8441c; --ember-deep: #8c2e12; --copper: #9c6326; --patina: #4d7a55;
+  --line: rgba(29, 24, 16, .16); --line-soft: rgba(29, 24, 16, .08);
+  --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --sans: 'Noto Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
 [hidden] { display: none !important; }
-.ew-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; min-width: 3rem; padding: 0.75rem 1rem; border: 1px solid #1a1a1a; border-radius: 0.4rem; cursor: pointer; font-size: 1rem; line-height: 1.2; background: #fff; color: #1a1a1a; text-align: center; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh; color: var(--ink); font-family: var(--sans);
+  background: radial-gradient(120% 55% at 50% 0%, var(--paper-3) 0%, var(--paper) 70%) var(--paper) no-repeat;
+  -webkit-font-smoothing: antialiased; font-optical-sizing: auto;
+}
+
+.ew { max-width: 40rem; margin: 0 auto; padding: 1.25rem 1.1rem 2.25rem; line-height: 1.55; }
+
+/* masthead: the MSP first */
+.ew-head { display: flex; align-items: center; gap: .7rem; margin: 0 0 1.15rem; }
+.ew-brand { margin: 0; }
+.ew-logo { max-height: 2.75rem; max-width: 10rem; width: auto; height: auto; display: block; }
+.ew-msp { margin: 0; font-family: var(--serif); font-weight: 600; font-size: 1.08rem; letter-spacing: -.01em; color: var(--ink); }
+.ew h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(1.95rem, 7.4vw, 2.5rem); line-height: 1.06; letter-spacing: -.02em; margin: 0 0 .7rem; }
+.ew-lede { color: var(--ink-2); margin: 0 0 1.25rem; }
+
+/* steps */
+.ew-progress { display: flex; align-items: center; gap: .5rem; margin: 1rem 0 .6rem; font-family: var(--mono); font-size: .74rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.ew-progress::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--ember); }
+.ew-step-nav { display: flex; gap: .6rem; margin: 0 0 1.1rem; }
+.ew-items { list-style: none; padding: 0; margin: 0; }
+.ew-item {
+  margin: 0 0 1.25rem; padding: 1.15rem 1.1rem 1.25rem;
+  background: var(--paper-3); border: 1px solid var(--line-soft); border-radius: 20px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .7) inset, 0 14px 30px -20px rgba(60, 40, 20, .45);
+}
+.ew-item h2 { font-family: var(--serif); font-weight: 600; font-size: 1.4rem; line-height: 1.2; letter-spacing: -.01em; margin: 0 0 .45rem; outline: none; }
+.ew-item > p { color: var(--ink-2); margin: 0 0 .95rem; }
+.ew-guide { width: 100%; border-radius: 14px; }
+
+/* camera */
+.ew-preview { display: block; width: 100%; max-height: 60vh; background: #14110d; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25), 0 10px 24px -14px rgba(0, 0, 0, .6); margin: 0 0 .8rem; }
+.ew-live p { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; margin: 0; }
+.ew-count { font-family: var(--serif); font-weight: 600; font-size: 1.9rem; line-height: 1.1; color: var(--ember); margin: .2rem 0 .6rem !important; }
+.ew-count:empty, .ew-timer:empty { display: none !important; }
+.ew-timer { display: flex; align-items: center; gap: .5rem; font-family: var(--mono); font-size: .86rem; font-weight: 600; color: var(--ember-deep); margin: 0 0 .7rem !important; }
+.ew-timer::before { content: ""; width: .6rem; height: .6rem; border-radius: 50%; background: #d63a2a; box-shadow: 0 0 0 4px rgba(214, 58, 42, .18); }
+
+/* buttons: the camera action is the primary one */
+.ew-btn, .ew-skip, .ew-opt, .ew-done, .ew [data-answer-save], .ew-voice-offer button {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; min-width: 3rem;
+  padding: .75rem 1.1rem; font: 600 1rem/1.2 var(--sans); text-align: center; cursor: pointer;
+  border-radius: 14px; border: 1px solid var(--line); background: transparent; color: var(--ink);
+  transition: background .15s, border-color .15s, color .15s;
+}
 .ew-btn input { display: none; }
-.ew-btn:disabled { opacity: 0.45; cursor: default; }
-.ew-skip { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; min-width: 3rem; padding: 0.75rem 1rem; margin-left: 0.5rem; margin-top: 0.5rem; font-size: 1rem; border: 1px solid #555; border-radius: 0.4rem; background: #fff; cursor: pointer; }
-.ew-status { min-height: 1.5em; margin: 0.75rem 0 0; }
-.ew-done { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0.75rem 1.4rem; font-size: 1rem; border: 1px solid #1a1a1a; border-radius: 0.4rem; background: #1a1a1a; color: #fff; cursor: pointer; margin-top: 1rem; }
-.ew-opt { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; min-width: 3rem; margin-right: 0.4rem; margin-bottom: 0.4rem; padding: 0.75rem 1rem; font-size: 1rem; border: 1px solid #1a1a1a; border-radius: 0.4rem; background: #fff; cursor: pointer; }
-.ew-preview { width: 100%; max-height: 60vh; background: #111; border-radius: 0.4rem; }
-.ew-count { font-size: 1.4rem; font-weight: 700; min-height: 1.4em; }
-.ew-timer { min-height: 1.2em; }
-.ew-guide { width: 100%; border-radius: 0.4rem; }
-.ew-fallback { margin-left: 0.5rem; margin-top: 0.5rem; }
-.ew-note { margin-top: 0.75rem; }
-.ew-live p { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.ew-btn:disabled { opacity: .45; cursor: default; }
+.ew-live .ew-btn { background: var(--ember); border-color: var(--ember); color: #fdf8ec; box-shadow: 0 10px 18px -10px rgba(200, 68, 28, .75); }
+.ew-nav-btn { flex: 1 1 0; border-radius: 999px; background: var(--paper-3); }
+.ew-fallback { margin-top: .55rem; background: var(--paper-3); }
+.ew-skip { margin-top: .55rem; border-style: dashed; color: var(--ink-2); }
+.ew-opt { margin: 0 .4rem .45rem 0; border-radius: 999px; background: var(--paper-3); }
+.ew [data-answer-text] { width: 100%; margin: 0 0 .55rem; padding: .8rem .9rem; font: 400 1rem/1.3 var(--sans); color: var(--ink); background: #fffdf8; border: 1px solid var(--line); border-radius: 12px; }
+.ew [data-answer-text]:focus { outline: none; border-color: var(--ember); box-shadow: 0 0 0 3px rgba(200, 68, 28, .16); }
+.ew [data-answer-save] { background: var(--paper-3); }
+.ew-done { width: 100%; margin-top: .4rem; background: var(--ink); border-color: var(--ink); color: var(--paper-3); }
+.ew-done-msg { font-family: var(--serif); font-size: 1.15rem; margin: .9rem 0 0; }
+.ew-done-msg:empty { display: none; }
+
+/* what the page says back: a retake reads differently from a thank-you */
+.ew-status { margin: .8rem 0 0; padding: .7rem .85rem; border-radius: 12px; font-size: .95rem; color: var(--ink-2); background: var(--paper-2); border: 1px solid var(--line-soft); }
+.ew-status:empty { display: none; }
+.ew-status[data-tone="retake"] { color: var(--ember-deep); background: #fbeadf; border-color: rgba(200, 68, 28, .35); }
+.ew-status[data-tone="ok"] { color: #2f5a37; background: #e6efe2; border-color: rgba(77, 122, 85, .4); font-weight: 600; }
+.ew-status[data-tone="problem"] { color: var(--ember-deep); border-color: rgba(200, 68, 28, .35); }
+.ew-note { margin: .9rem 0 0; padding: .15rem 0 .15rem .75rem; border-left: 3px solid var(--copper); font-size: .92rem; color: var(--muted); }
+
+.ew-voice-offer { margin: 0 0 1.25rem; padding: 1rem 1.1rem; background: var(--paper-3); border: 1px solid var(--line-soft); border-radius: 20px; }
+.ew-voice-offer p { margin: 0 0 .7rem; color: var(--ink-2); }
+
+/* Wegweiser signs off at the foot */
+.ew-foot { display: flex; align-items: center; justify-content: center; gap: .45rem; margin: 2rem 0 0; font-family: var(--mono); font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.ew-foot__mark { width: 1rem; height: 1rem; background-color: var(--copper);
+  -webkit-mask: url('/static/images/logo-icon.svg') center / contain no-repeat;
+          mask: url('/static/images/logo-icon.svg') center / contain no-repeat; }
+
 @media (max-width: 480px) {
-  .ew { padding: 0.75rem; }
+  .ew { padding: 1rem .9rem 2rem; }
   .ew-live p { flex-direction: column; align-items: stretch; }
-  .ew-live .ew-btn { width: 100%; }
-  .ew-fallback { margin-left: 0; width: 100%; box-sizing: border-box; }
-  .ew-skip { margin-left: 0; width: 100%; box-sizing: border-box; }
-  .ew-opt { width: 100%; box-sizing: border-box; margin-right: 0; }
-  .ew-done { width: 100%; box-sizing: border-box; }
+  .ew-live .ew-btn, .ew-fallback, .ew-skip, .ew-opt, .ew [data-answer-save] { width: 100%; }
+  .ew-opt { margin-right: 0; }
 }

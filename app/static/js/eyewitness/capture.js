@@ -379,3 +379,22 @@
     showStep(firstUnfinishedFrom(0));
   })();
 })();
+
+// Each status line carries a tone, so the page can set a retake apart
+// from a thank-you. Only the attribute changes; the wording stays as the
+// capture code wrote it.
+(function () {
+  function tone(text) {
+    if (!text) return "";
+    if (/^Please retake/.test(text)) return "retake";
+    if (/^(Got it|Skipped)/.test(text)) return "ok";
+    if (/^(Sending|Checking)/.test(text)) return "busy";
+    if (/did not work|not allowed|not available|No camera|too short|too quiet/i.test(text)) return "problem";
+    return "info";
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-status]"), function (el) {
+    var mark = function () { el.setAttribute("data-tone", tone(el.textContent.trim())); };
+    mark();
+    new MutationObserver(mark).observe(el, {childList: true, characterData: true, subtree: true});
+  });
+})();

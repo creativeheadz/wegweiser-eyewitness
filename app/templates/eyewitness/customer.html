@@ -8,10 +8,12 @@
 </head>
 <body>
 <main class="ew" data-next-time-days="{{ next_time_days }}">
-  {% if msp_logo_url %}<p class="ew-brand"><img class="ew-logo" src="{{ msp_logo_url }}" alt="{{ msp_name }}"></p>{% endif %}
-  <p class="ew-msp">{{ msp_name }}</p>
+  <header class="ew-head">
+    {% if msp_logo_url %}<p class="ew-brand"><img class="ew-logo" src="{{ msp_logo_url }}" alt="{{ msp_name }}"></p>{% endif %}
+    <p class="ew-msp">{{ msp_name }}</p>
+  </header>
   <h1>Help us fix this faster</h1>
-  <p>Please work through the steps below. You can skip anything you can't do. Photos are checked as soon as they arrive, and we will tell you if one needs retaking. Your photos are only used for this ticket.</p>
+  <p class="ew-lede">Please work through the steps below. You can skip anything you can't do. Photos are checked as soon as they arrive, and we will tell you if one needs retaking. Your photos are only used for this ticket.</p>
   <p class="ew-progress" data-progress aria-live="polite" hidden></p>
   <nav class="ew-step-nav" data-step-nav hidden aria-label="Steps">
     <button type="button" class="ew-btn ew-nav-btn" data-nav-back>Back</button>
@@ -87,6 +89,7 @@
 
   <button type="button" class="ew-done" data-done>Done</button>
   <p class="ew-done-msg" data-done-msg role="status"></p>
+  <footer class="ew-foot"><span class="ew-foot__mark" aria-hidden="true"></span>Powered by Wegweiser</footer>
 </main>
 <script nonce="{{ csp_nonce() }}" src="{{ url_for('static', filename='js/eyewitness/capture.js') }}"></script>
 </body>

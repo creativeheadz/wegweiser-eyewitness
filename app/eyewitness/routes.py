@@ -442,7 +442,11 @@ def _deliver(rec, row) -> dict | None:
         if connector is None:
             row.delivered_via = {"connector": "zammad", "error": str(reason)}
         else:
-            out = connector.post_public_note(rec.external_id, row.customer_text)
+            from app.eyewitness import requests as ew_requests
+            out = connector.post_public_note(
+                rec.external_id, row.customer_text,
+                html=ew_requests.render_customer_html(row.customer_text,
+                                                      row.items))
             row.delivered_via = {"connector": "zammad", **out}
         db.session.commit()
         return row.delivered_via

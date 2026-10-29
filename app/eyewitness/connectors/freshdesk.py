@@ -8,10 +8,10 @@ from .base import HelpdeskConnector
 class FreshdeskConnector(HelpdeskConnector):
     provider = "freshdesk"
 
-    def post_public_note(self, external_ticket_id, text):
+    def post_public_note(self, external_ticket_id, text, html=None):
         raise NotImplementedError("Freshdesk connector is a documented stub")
 
-    def post_internal_note(self, external_ticket_id, text):
+    def post_internal_note(self, external_ticket_id, text, html=None):
         raise NotImplementedError("Freshdesk connector is a documented stub")
 
     def attach_file(self, external_ticket_id, filename, data, mime):

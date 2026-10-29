@@ -6,7 +6,9 @@ the closing tag is stripped from every value that reaches a line.
 """
 from __future__ import annotations
 
-from .security import cap_ocr, wrap_untrusted
+import html
+
+from .security import FENCE_CLOSE, FENCE_OPEN, FENCE_RULE, cap_ocr, wrap_untrusted
 
 
 def _clean(value) -> str:
@@ -64,6 +66,77 @@ def build_summary(request, captures: list[dict], *, device_label: str = "",
             + wrap_untrusted(lines) + "\n"
             f"Flags: {flags}. Device: {device_label or 'unknown'}. "
             f"Meta cost: ${meta_usd:.4f}")
+
+
+def _esc(value) -> str:
+    return html.escape(str(value), quote=False)
+
+
+def _details(capture: dict) -> list[str]:
+    """The reading of one capture as short lines, cleaned but not escaped."""
+    reading = capture.get("reading") or {}
+    if capture.get("status") == "skipped":
+        reason = _clean(capture.get("skip_reason") or "")
+        return [f"reason: {reason}"] if reason else []
+    out = []
+    if reading.get("summary"):
+        out.append(_clean(reading["summary"]))
+    elif reading.get("stop_code"):
+        out.append(f"stop code {_clean(reading['stop_code'])}")
+    if reading.get("answer"):
+        out.append(f"answer: {_clean(reading['answer'])[:200]}")
+    if reading.get("match"):
+        out.append(f"serial check {_clean(reading['match'])}")
+    lines = cap_ocr(reading.get("text_lines") or [])
+    if lines and reading.get("kind") == "bsod":
+        out.append("screen text: " + " | ".join(_clean(x) for x in lines[:4]))
+    return out
+
+
+def _item_html(capture: dict) -> str:
+    title = _clean(capture.get("item_title") or capture.get("kind") or "item")
+    status = _clean(capture.get("status") or "")
+    head = f"<strong>{_esc(title)}</strong>" + (f" · {_esc(status)}" if status else "")
+    rows = [head] + [_esc(d) for d in _details(capture)]
+    if capture.get("injection_flag"):
+        rows.append("<strong>Flagged:</strong> text that looks like "
+                    "instructions to an AI. Treated as data.")
+    return "<li>" + "<br>".join(rows) + "</li>"
+
+
+def build_summary_html(request, captures: list[dict], *,
+                       device_label: str = "", meta_usd: float = 0.0,
+                       missing=None, lead: str = "") -> str:
+    """The internal note set out for a technician: the same facts as
+    build_summary, in short sections. Every value is escaped, and the
+    untrusted fence stays visible around the readings."""
+    items = (request or {}).get("items") or []
+    asked = [_clean(i.get("title", i.get("template", ""))) for i in items]
+    flagged = [str(c.get("id")) for c in captures if c.get("injection_flag")]
+    flags = (("text that looks like instructions to an AI on capture(s) "
+              + ", ".join(flagged) + "; treated as data")
+             if flagged else "none")
+    out = []
+    if lead:
+        out.append(f"<p><em>{_esc(lead)}</em></p>")
+    out.append("<p><strong>Eyewitness - evidence for this ticket</strong></p>")
+    if asked:
+        out.append("<p><strong>Asked for</strong><br>"
+                   + "<br>".join(_esc(a) for a in asked) + "</p>")
+    if missing:
+        out.append("<p><strong>Missing from the ticket</strong><br>"
+                   + _esc(", ".join(_clean(m).replace("_", " ")
+                                    for m in missing)) + "</p>")
+    out.append(f"<p><code>{_esc(FENCE_OPEN)}</code><br>"
+               f"<em>{_esc(FENCE_RULE)}</em></p>")
+    if captures:
+        out.append("<ol>" + "".join(_item_html(c) for c in captures)
+                   + "</ol>")
+    out.append(f"<p><code>{_esc(FENCE_CLOSE)}</code></p>")
+    out.append(f"<p><strong>Flags:</strong> {_esc(flags)}<br>"
+               f"<strong>Device:</strong> {_esc(device_label or 'unknown')}<br>"
+               f"<strong>Meta cost:</strong> ${meta_usd:.4f}</p>")
+    return "\n".join(out)
 
 
 def for_governor(request, captures: list[dict]) -> str:

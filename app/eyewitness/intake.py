@@ -442,14 +442,17 @@ def assess_run(run_id: int, base_url: str = "") -> dict:
 def _deliver(rec, row) -> None:
     """Post the customer-visible note through the tenant connector."""
     try:
+        from app.eyewitness import requests as ew_requests
         from app.eyewitness.connectors.zammad import ZammadConnector
         connector, _reason = ZammadConnector.for_tenant(rec.tenant_uuid)
         if connector is None:
             row.delivered_via = {"connector": "zammad",
                                  "error": "not connected"}
         else:
-            out = connector.post_public_note(rec.external_id,
-                                             row.customer_text)
+            out = connector.post_public_note(
+                rec.external_id, row.customer_text,
+                html=ew_requests.render_customer_html(row.customer_text,
+                                                      row.items))
             row.delivered_via = {"connector": "zammad", **out}
         from app.models import db
         db.session.commit()
@@ -565,7 +568,7 @@ def release_run(run_id) -> bool:
                .order_by(EvidenceRequest.created_at.desc()).first())
     if req_row is not None and rec is not None and rec.provider == "zammad":
         try:
-            from app.eyewitness.summary import build_summary
+            from app.eyewitness.summary import build_summary, build_summary_html
             from app.models import Devices
             device = (db.session.get(Devices, rec.deviceuuid)
                       if rec.deviceuuid else None)
@@ -574,15 +577,19 @@ def release_run(run_id) -> bool:
                 label += " (known from the ticket binding)"
             captures = _captures_as_dicts(req_row)
             missing = ((run.assessment or {}).get("missing") or [])
+            meta_usd = _ticket_meta_usd(run, req_row)
             body = build_summary(
                 {"items": req_row.items or []}, captures,
-                device_label=label, meta_usd=_ticket_meta_usd(run, req_row),
-                missing=missing)
+                device_label=label, meta_usd=meta_usd, missing=missing)
+            body_html = build_summary_html(
+                {"items": req_row.items or []}, captures,
+                device_label=label, meta_usd=meta_usd, missing=missing)
             from app.eyewitness.connectors.zammad import ZammadConnector
             connector, _reason = ZammadConnector.for_tenant(
                 rec.tenant_uuid)
             if connector is not None:
-                connector.post_internal_note(rec.external_id, body)
+                connector.post_internal_note(rec.external_id, body,
+                                             html=body_html)
         except Exception:
             logger.exception("eyewitness: summary post failed on run %s",
                              run.id)
@@ -654,21 +661,24 @@ def post_followup(capture_id: int) -> bool:
     if rec is None or rec.provider != "zammad":
         return False
     try:
-        from app.eyewitness.summary import build_summary
+        from app.eyewitness.summary import build_summary, build_summary_html
         title = next((i.get("title") for i in (req_row.items or [])
                       if i.get("id") == cap.item_id), cap.item_id)
-        body = build_summary(
-            {"items": req_row.items or []},
-            [{"id": cap.id, "item_id": cap.item_id, "item_title": title,
-              "kind": cap.kind, "status": cap.status,
-              "reading": cap.reading, "injection_flag": cap.injection_flag}],
+        one = [{"id": cap.id, "item_id": cap.item_id, "item_title": title,
+                "kind": cap.kind, "status": cap.status,
+                "reading": cap.reading, "injection_flag": cap.injection_flag}]
+        lead = "Follow-up capture after the ticket was handed on."
+        body = lead + "\n" + build_summary(
+            {"items": req_row.items or []}, one,
             device_label="see ticket", meta_usd=0.0)
-        body = "Follow-up capture after the ticket was handed on.\n" + body
+        body_html = build_summary_html(
+            {"items": req_row.items or []}, one,
+            device_label="see ticket", meta_usd=0.0, lead=lead)
         from app.eyewitness.connectors.zammad import ZammadConnector
         connector, _reason = ZammadConnector.for_tenant(rec.tenant_uuid)
         if connector is None:
             return False
-        connector.post_internal_note(rec.external_id, body)
+        connector.post_internal_note(rec.external_id, body, html=body_html)
         return True
     except Exception:
         logger.exception("eyewitness: follow-up post failed")

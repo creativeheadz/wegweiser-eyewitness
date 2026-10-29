@@ -10,11 +10,15 @@ class HelpdeskConnector(ABC):
     provider = "base"
 
     @abstractmethod
-    def post_public_note(self, external_ticket_id: str, text: str) -> dict:
-        """Customer-visible article (internal=False). Returns {article_id}."""
+    def post_public_note(self, external_ticket_id: str, text: str,
+                         html: str | None = None) -> dict:
+        """Customer-visible article (internal=False). Returns {article_id}.
+        `html`, when given, is the same note set out for desks that
+        render HTML; desks that do not keep the text."""
 
     @abstractmethod
-    def post_internal_note(self, external_ticket_id: str, text: str) -> dict:
+    def post_internal_note(self, external_ticket_id: str, text: str,
+                           html: str | None = None) -> dict:
         """Technician-only article (internal=True). Returns {article_id}."""
 
     @abstractmethod
