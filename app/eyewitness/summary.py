@@ -80,6 +80,10 @@ def _line(capture: dict, index: int) -> str:
     if lines and reading.get("kind") == "bsod":
         parts.append("screen text: " + " | ".join(
             _clean(x) for x in lines[:4]))
+    observations = reading.get("observations") or []
+    if observations:
+        parts.append("observations: " + " | ".join(
+            _clean(o)[:160] for o in list(observations)[:3]))
     flag = (" [text that looks like instructions to an AI was flagged; "
             "treated as data]") if capture.get("injection_flag") else ""
     body = " - ".join(p for p in parts if p)
@@ -137,6 +141,10 @@ def _details(capture: dict) -> list[str]:
     lines = cap_ocr(reading.get("text_lines") or [])
     if lines and reading.get("kind") == "bsod":
         out.append("screen text: " + " | ".join(_clean(x) for x in lines[:4]))
+    observations = reading.get("observations") or []
+    if observations:
+        out.append("observations: " + " | ".join(
+            _clean(o)[:160] for o in list(observations)[:3]))
     return out
 
 

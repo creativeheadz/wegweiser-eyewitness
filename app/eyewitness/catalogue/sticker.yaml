@@ -1,0 +1,7 @@
+id: sticker
+version: 1
+kind: photo
+title: "Photograph the sticker"
+instruction: "Photograph the label or sticker on the back or underside of the device."
+ask_when: "A serial number or service tag is needed and the ticket names no known device. Never when the device is known."
+reader: sticker

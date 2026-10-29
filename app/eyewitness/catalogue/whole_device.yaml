@@ -1,0 +1,7 @@
+id: whole_device
+version: 1
+kind: photo
+title: "Photograph the whole device"
+instruction: "Take a photo showing the whole device and anything connected to it."
+ask_when: "The device will not power on at all and shows no light, or the technician needs to see the device and what is connected to it."
+reader: photo

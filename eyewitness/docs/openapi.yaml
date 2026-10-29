@@ -231,6 +231,8 @@ components:
                 type: array
                 items:
                   type: string
+              ask_when:
+                type: string
     Template:
       type: object
       properties:
@@ -248,6 +250,25 @@ components:
           type: [integer, 'null']
         next_time:
           type: boolean
+        reader:
+          type: string
+          enum: [vision, screen, sticker, photo, video, voice, beeps]
+        ask_when:
+          type: string
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+                enum: [text, choice, list, yes_no]
+              choices:
+                type: [array, 'null']
+                items:
+                  type: string
     CreateExplicit:
       type: object
       properties:

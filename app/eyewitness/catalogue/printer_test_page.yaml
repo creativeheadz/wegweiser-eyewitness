@@ -1,0 +1,37 @@
+id: printer_test_page
+version: 1
+kind: photo
+title: "Photograph a printed test page"
+instruction: "Print a test page from the printer's own menu. Lay it flat in good light and photograph the whole page."
+ask_when: "The ticket describes poor print quality: streaks, lines, faded or patchy print, smudges, missing colours or blank pages."
+keywords: [streak, streaks, faded print, smudge, print quality, blank page, lines on the page, missing colour]
+reader: vision
+look_for: "A printed page, ideally the printer's own test or configuration page. Look for print defects: streaks or lines running down the page, bands across it, faded or patchy areas, smudges, a ghost of the image repeated lower down, a colour missing from the colour blocks, skew, or a blank page. Read the printer model, the page count and any toner or ink levels printed on the page."
+label: "test page"
+fields:
+  - name: defects
+    type: list
+    describe: "Every print defect you can see. Use none when the print looks clean."
+    choices: [streaks, bands, faded, patchy, smudges, ghosting, missing_colour, skewed, blank_page, none]
+    in_summary: true
+  - name: missing_colours
+    type: list
+    describe: "Colours that are missing or very faint in the colour blocks."
+    choices: [cyan, magenta, yellow, black]
+    in_summary: true
+  - name: printer_model
+    type: text
+    describe: "The printer model printed on the page, exactly as printed, or null."
+    in_summary: true
+  - name: toner_levels
+    type: text
+    describe: "Toner or ink levels printed on the page, exactly as printed, or null."
+  - name: page_count
+    type: text
+    describe: "The page count printed on the page, or null."
+retake:
+  not_found: "No printed page could be seen in the photo. Lay the page flat and photograph all of it."
+  glare: "Light is reflecting off the page. Move away from the window or lamp and try again."
+  cropped: "Part of the page is cut off. Step back so the whole page fits in the photo."
+  blur: "The photo is out of focus. Hold the phone steady above the page and tap the screen to focus."
+  other: "The page cannot be read. Lay it flat in good light and photograph all of it."

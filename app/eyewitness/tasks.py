@@ -8,28 +8,19 @@ from app.extensions import celery
 
 logger = logging.getLogger(__name__)
 
-# Photo templates that show a screen or a display, which Spark reads.
-# Other photos (the whole device, the cables, custom items) get the
-# quality gate only, so a clear photo of cables is never sent back for
-# showing no screen.
-SCREEN_TEMPLATES = frozenset({"screen_photo", "screen_photo_next_time",
-                              "printer_panel"})
+from . import catalogue as _catalogue
 
-# Every item template routes to its reader by name. A template with
-# no entry here falls back to its capture kind, and the test holds
-# the table against the template catalogue so a new template cannot
-# drift to the wrong reader.
-TEMPLATE_READERS = {
-    "screen_photo": "screen",
-    "screen_photo_next_time": "screen",
-    "printer_panel": "screen",
-    "sticker": "sticker",
-    "whole_device": "photo",
-    "cables_back": "photo",
-    "custom": "photo",
-    "power_light_video": "video",
-    "voice_note": "voice",
-}
+# Photo templates whose reader is the screen reader, derived from
+# the catalogue files so a new file cannot drift from the table.
+SCREEN_TEMPLATES = frozenset(spec["id"] for spec in _catalogue.all_specs()
+                             if spec.get("reader") == "screen")
+
+# Every item template routes to its reader by name, from the files,
+# plus custom which stays a code path. A template with no entry here
+# falls back to its capture kind.
+TEMPLATE_READERS = {spec["id"]: spec["reader"]
+                    for spec in _catalogue.all_specs()}
+TEMPLATE_READERS["custom"] = "photo"
 
 
 def reader_for(template: str | None, kind: str | None) -> str:
@@ -87,7 +78,23 @@ def process_capture(capture_id: int) -> dict:
                 client = reader_client(tenant_uuid)
             except Exception:
                 client = None
-        if reader == "sticker":
+        template_name = (item or {}).get("template")
+        spec = _catalogue.get(template_name) if template_name else None
+        if spec is None and template_name:
+            # The template has gone from the catalogue. Fall back by
+            # capture kind, as reader_for already did for the reader.
+            reader = reader_for(None, cap.kind)
+        if reader == "vision":
+            from app.eyewitness.readers.vision import read_vision
+            result = read_vision(data, spec or {}, client=client,
+                                 capture_id=cap.id,
+                                 intake_run_id=(req.intake_run_id
+                                                if req else None),
+                                 tenant_uuid=tenant_uuid)
+        elif reader == "beeps":
+            from app.eyewitness.readers.beeps import read_beeps
+            result = read_beeps(data, cap.mime, spec or {})
+        elif reader == "sticker":
             from app.eyewitness.readers.sticker import read_sticker
             result = read_sticker(data, client=client,
                                   known_serials=_known_serials_for(cap),

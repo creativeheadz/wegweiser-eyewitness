@@ -1,0 +1,8 @@
+id: power_light_video
+version: 1
+kind: video
+max_seconds: 15
+title: "Film the power light"
+instruction: "Press the power button, then film the light for 10 seconds. Keep the phone still."
+ask_when: "A power or status light on the computer blinks or changes colour, or the computer will not start and a light still shows."
+reader: video

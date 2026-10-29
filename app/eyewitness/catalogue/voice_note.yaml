@@ -1,0 +1,8 @@
+id: voice_note
+version: 1
+kind: voice
+max_seconds: 60
+title: "Tell us what happened"
+instruction: "Record a short voice note describing what happened, in your own words."
+ask_when: "The ticket is too short or unclear to act on, and a spoken description would help more than a photo."
+reader: voice

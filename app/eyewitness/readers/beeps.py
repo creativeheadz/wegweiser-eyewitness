@@ -26,12 +26,45 @@ def beep_table() -> dict:
     return _TABLE
 
 
-def decode_beeps(samples, sample_rate: int) -> dict:
+TONAL_MIN = 0.45
+TONAL_LOW_HZ = 300.0
+TONAL_HIGH_HZ = 4000.0
+
+
+def _tonal_ratio(segment, sample_rate: int) -> float:
+    """Share of energy in a narrow band around the peak, 300 Hz to 4 kHz.
+
+    A beep puts most of its energy in one narrow band. Speech spreads
+    energy across harmonics and noise spreads it across the spectrum,
+    so both score low. Measured on synthetic tones, speech-like notes,
+    noise and silence; the bar sits with a margin on both sides.
+    """
+    import numpy as np
+    seg = np.asarray(segment, dtype=np.float64).ravel()
+    if seg.size < 32:
+        return 0.0
+    seg = seg - float(seg.mean())
+    spectrum = np.abs(np.fft.rfft(seg * np.hanning(seg.size))) ** 2
+    freqs = np.fft.rfftfreq(seg.size, d=1.0 / sample_rate)
+    band = (freqs >= TONAL_LOW_HZ) & (freqs <= TONAL_HIGH_HZ)
+    if not band.any() or spectrum.sum() <= 0:
+        return 0.0
+    masked = np.where(band, spectrum, 0.0)
+    peak = int(np.argmax(masked))
+    half = max(2, int(round(0.06 * peak)))
+    lo = max(0, peak - half)
+    hi = min(spectrum.size, peak + half + 1)
+    return float(spectrum[lo:hi].sum() / spectrum.sum())
+
+
+def decode_beeps(samples, sample_rate: int, *, require_tonal: bool = False) -> dict:
     """Count beeps in mono samples. Returns the reading fragment.
 
     `samples` is a sequence of floats or ints at `sample_rate`. The
     envelope is the mean absolute value in 10 ms windows. A tone is a
-    run over the adaptive mark that lasts 60 ms to 1.5 s.
+    run over the adaptive mark that lasts 60 ms to 1.5 s. With
+    `require_tonal` each tone must also pass the tonal check, so
+    speech and noise never count as beeps.
     """
     import numpy as np
     empty = {"count": 0, "pattern": None, "pattern_text": "",
@@ -64,6 +97,14 @@ def decode_beeps(samples, sample_rate: int) -> dict:
     if start is not None:
         tones.append(_tone(start, len(env), win, sample_rate))
     tones = [t for t in tones if 0.06 <= t["duration_s"] <= 1.5]
+    if require_tonal and tones:
+        kept = []
+        for tone in tones:
+            first = int(tone["start_s"] * sample_rate)
+            last = int(tone["end_s"] * sample_rate)
+            if _tonal_ratio(arr[first:last], sample_rate) >= TONAL_MIN:
+                kept.append(tone)
+        tones = kept
     if not tones:
         return empty
     if len(tones) >= 6:
@@ -101,6 +142,98 @@ def _tone(start_win: int, end_win: int, win: int,
     return {"start_s": round(start_s, 3), "end_s": round(end_s, 3),
             "duration_s": round(duration, 3),
             "kind": "long" if duration >= LONG_MIN_S else "short"}
+
+
+BEEP_RETAKE_DEFAULTS = {
+    "too_short": "The recording is too short. Record until the beeps stop.",
+    "too_quiet": "The recording is too quiet. Hold the phone closer to the computer and try again.",
+    "no_beeps": "No beeps could be heard. Hold the phone close to the computer and record again while it starts.",
+    "unreadable": "The recording could not be read. Please record it again.",
+}
+
+
+def _wav_samples(path: str):
+    import wave
+    import numpy as np
+    with wave.open(path, "rb") as wav:
+        frames = wav.readframes(wav.getnframes())
+        rate = wav.getframerate()
+        width = wav.getsampwidth()
+        channels = wav.getnchannels()
+    if width == 2:
+        samples = np.frombuffer(frames, dtype=np.int16).astype(np.float64) / 32768.0
+    elif width == 4:
+        samples = np.frombuffer(frames, dtype=np.int32).astype(np.float64) / 2147483648.0
+    else:
+        samples = np.frombuffer(frames, dtype=np.uint8).astype(np.float64) / 128.0 - 1.0
+    if channels > 1:
+        samples = samples[::channels]
+    return samples, rate
+
+
+def read_beeps(data: bytes, mime: str | None = None, spec: dict | None = None) -> dict:
+    """Reader contract for one beep recording. Code only, no model."""
+    import shutil
+    import subprocess
+    import tempfile
+    spec = spec or {}
+    retake_map = dict(BEEP_RETAKE_DEFAULTS)
+    retake_map.update(spec.get("retake") or {})
+
+    def retake(reason, reading=None):
+        return {"verdict": "retake",
+                "retake": {"reason": reason, "advice": retake_map[reason]},
+                "reading": reading or {"template": spec.get("id"),
+                                        "catalogue_version": spec.get("version")},
+                "injection_flag": False}
+
+    if not data:
+        return retake("unreadable")
+    work = tempfile.mkdtemp(prefix="eyewitness-beep-rec-")
+    try:
+        src = os.path.join(work, "source.bin")
+        dst = os.path.join(work, "beeps.wav")
+        with open(src, "wb") as fh:
+            fh.write(data)
+        done = subprocess.run(
+            ["ffmpeg", "-y", "-nostdin", "-protocol_whitelist", "file",
+             "-i", src, "-t", str(MAX_SECONDS), "-vn", "-ac", "1",
+             "-ar", "16000", "-c:a", "pcm_s16le", dst],
+            capture_output=True, timeout=60)
+        if done.returncode != 0 or not os.path.exists(dst):
+            return retake("unreadable")
+        try:
+            samples, rate = _wav_samples(dst)
+        except Exception:
+            return retake("unreadable")
+        import numpy as np
+        duration = float(samples.size / rate) if rate else 0.0
+        rms = float(np.sqrt(np.mean(samples ** 2))) if samples.size else 0.0
+        from .voice import MIN_RMS, MIN_SECONDS
+        reading = {"template": spec.get("id"),
+                   "catalogue_version": spec.get("version"),
+                   "stats": {"duration_s": duration, "rms": rms}}
+        if duration < MIN_SECONDS:
+            return retake("too_short", reading)
+        if rms < MIN_RMS:
+            return retake("too_quiet", reading)
+        found = decode_beeps(samples, rate, require_tonal=True)
+        if not found.get("count"):
+            return retake("no_beeps", reading)
+        reading.update({"count": found["count"], "pattern": found["pattern"],
+                        "pattern_text": found["pattern_text"],
+                        "meaning": found["meaning"], "source": found["source"],
+                        "beeps": found["beeps"]})
+        summary = f"beeps: {found['pattern_text']}"
+        if found.get("meaning"):
+            summary += " - " + str(found["meaning"])[:160]
+        reading["summary"] = summary[:300]
+        return {"verdict": "ok", "retake": None, "reading": reading,
+                "injection_flag": False}
+    except Exception:
+        return retake("unreadable")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def beeps_from_wav(path: str) -> dict | None:

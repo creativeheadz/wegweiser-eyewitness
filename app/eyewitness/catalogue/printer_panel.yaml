@@ -1,0 +1,35 @@
+id: printer_panel
+version: 1
+kind: photo
+title: "Photograph the printer panel"
+instruction: "Photograph the printer display so the message can be read."
+ask_when: "A printer shows a message, error code or warning light on its own panel or display."
+reader: vision
+look_for: "The control panel of a printer or copier: its display and status lights. Copy the message on the display exactly, with any error or event code. Note which status lights are lit and their colour, and read the printer model when it shows."
+label: "printer panel"
+fields:
+  - name: message
+    type: text
+    describe: "The message on the display, exactly as shown, or null."
+    in_summary: true
+  - name: error_code
+    type: text
+    describe: "Any error or event code on the display, exactly as shown, or null."
+    in_summary: true
+  - name: problem
+    type: choice
+    describe: "The kind of problem the panel reports."
+    choices: [paper_jam, out_of_paper, toner_or_ink_low, toner_or_ink_empty, cover_open, offline, other_error, no_error]
+    in_summary: true
+  - name: lights
+    type: list
+    describe: "Each status light that is lit: its label or symbol, then its colour."
+  - name: printer_model
+    type: text
+    describe: "The printer model when it shows, or null."
+retake:
+  not_found: "No printer panel could be seen in the photo. Photograph the printer's display up close."
+  glare: "There is glare on the display. Tilt the phone slightly and try again."
+  cropped: "Part of the display is cut off. Step back a little so all of it fits in the photo."
+  blur: "The photo is out of focus. Hold the phone steady and tap the screen to focus."
+  other: "The display cannot be read. Photograph it up close in good light."

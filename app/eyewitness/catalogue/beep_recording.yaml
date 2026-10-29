@@ -1,0 +1,15 @@
+id: beep_recording
+version: 1
+kind: voice
+max_seconds: 20
+title: "Record the beeps"
+instruction: "Hold the phone close to the computer and switch it on. Record until the beeps stop."
+record_label: "Record the beeps"
+ask_when: "The computer beeps when it is switched on, or will not start and makes beeps."
+keywords: [beep, beeps, beeping]
+reader: beeps
+retake:
+  too_short: "The recording is too short. Record until the beeps stop."
+  too_quiet: "The recording is too quiet. Hold the phone closer to the computer and try again."
+  no_beeps: "No beeps could be heard. Hold the phone close to the computer and record again while it starts."
+  unreadable: "The recording could not be read. Please record it again."

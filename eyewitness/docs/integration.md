@@ -26,3 +26,6 @@ Every edit outside `app/eyewitness/`, `app/templates/eyewitness/`,
 | `app/templates/helpdesk/settings.html` | Eyewitness connections panel: hook address, key list, key creation form | 5 |
 
 No changes to `case_engine.py` or the case models, ever (brief 6.2).
+| `app/templates/helpdesk/settings.html` | The reader backend choice in the Eyewitness connections panel | 6 |
+| `migrations/versions/eyewitness_onprem_20261029.py` | The tenant reader backend column | 6 |
+| `app/__init__.py` | Register the `catalogue-check` shell command beside the Phase 5 commands | 7 |

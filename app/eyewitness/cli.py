@@ -112,6 +112,37 @@ def revoke_api_key_cmd(tenant, key_id):
     click.echo(f"Revoked key {row.id}.")
 
 
+@click.command("catalogue-check")
+@click.argument("path", required=False, default=None)
+@click.option("--show", is_flag=True,
+              help="Also print the vision prompt and schema per template.")
+def catalogue_check_cmd(path, show):
+    """Validate catalogue files. Exit code 1 on any error."""
+    import json as _json
+    from app.eyewitness import catalogue as _cat
+    if path:
+        entries = [(path, False)]
+    else:
+        entries = [(_cat._built_in_dir(), False)]
+        op = os.environ.get("EYEWITNESS_CATALOGUE_DIR") or ""
+        if op:
+            entries.append((op, True))
+    rows = _cat.check_paths(entries)
+    bad = False
+    for name, spec, error in rows:
+        if error or spec is None:
+            click.echo(f"{name}: {error or 'invalid'}")
+            bad = True
+            continue
+        click.echo(f"{spec['id']} {spec['kind']} {spec['reader']} OK")
+        if show and spec.get("reader") == "vision":
+            from app.eyewitness.readers.vision import build_schema, build_system
+            click.echo(build_system(spec))
+            click.echo(_json.dumps(build_schema(spec), indent=2, sort_keys=True))
+    if bad:
+        raise SystemExit(1)
+
+
 @click.command("show-hook")
 @click.option("--tenant", required=True, help="Tenant UUID.")
 @click.option("--base-url", default="", help="Public app base URL.")

@@ -181,7 +181,9 @@ def test_retake_advice_is_always_a_fixed_sentence():
 def test_only_screen_photos_go_to_the_screen_reader():
     assert reader_for("screen_photo", "photo") == "screen"
     assert reader_for("screen_photo_next_time", "photo") == "screen"
-    assert reader_for("printer_panel", "photo") == "screen"
+    # Phase 7: printer_panel moved to the generic vision reader, as
+    # the screen prompt is written for Windows crash screens.
+    assert reader_for("printer_panel", "photo") == "vision"
     assert reader_for("sticker", "photo") == "sticker"
     for template in ("whole_device", "cables_back", "custom", None):
         assert reader_for(template, "photo") == "photo"

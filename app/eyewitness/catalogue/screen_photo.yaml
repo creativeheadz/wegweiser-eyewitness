@@ -1,0 +1,8 @@
+id: screen_photo
+version: 1
+kind: photo
+title: "Photograph the error on the screen"
+instruction: "Hold the phone about 30 cm from the screen, tap the screen to focus, and take the photo."
+next_time: true
+ask_when: "An error message, crash screen or code is showing on the screen now and stays there."
+reader: screen

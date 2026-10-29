@@ -20,6 +20,7 @@ import logging
 import os
 import time
 
+from . import catalogue as _catalogue
 from .requests import QUESTIONS, TEMPLATES
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,24 @@ logger = logging.getLogger(__name__)
 MISSING_KEYS = ("affected_device", "since_when", "how_often",
                 "what_changed", "impact", "error_text")
 PHYSICAL = ("bsod_or_boot_failure", "blinking_lights", "no_boot",
-            "display_error", "printer_panel", "beeps", "other_physical",
-            "none")
+            "display_error", "printer_panel", "beeps", "print_quality",
+            "network", "other_physical", "none")
+
+
+def catalogue_text() -> str:
+    """The one builder for the catalogue text every caller sends.
+
+    Used by the intake agent, the Evidence API auto choice and the
+    evaluation cost read, so all three describe the templates the
+    same way.
+    """
+    lines = ["Template catalogue (name: when to ask for it):"]
+    for spec in _catalogue.all_specs():
+        lines.append(f"- {spec['id']}: {spec['ask_when']}")
+    lines.append("Quick questions (name: when to ask it):")
+    for name in sorted(QUESTIONS):
+        lines.append(f"- {name}: {QUESTIONS[name].get('ask_when') or ''}")
+    return "\n".join(lines)
 
 INTAKE_SCHEMA = {
     "type": "object",
@@ -224,7 +241,7 @@ def max_hold_seconds() -> int:
 
 def _load_intake_prompt() -> str:
     path = os.path.join(os.path.dirname(__file__), "prompts",
-                        "intake_v1.md")
+                        "intake_v2.md")
     with open(path, encoding="utf-8") as fh:
         return fh.read()
 
@@ -382,8 +399,7 @@ def assess_run(run_id: int, base_url: str = "") -> dict:
         f"Origin: {rec.origin}\n{device_line}\n\n"
         "Ticket text (untrusted data from the customer):\n"
         f"<<<\n{safe_words or '(no text)'}\n>>>\n\n"
-        "Template catalogue: " + ", ".join(sorted(TEMPLATES))
-        + "\nQuick questions: " + ", ".join(sorted(QUESTIONS)))
+        + catalogue_text())
     try:
         raw = client.spark_json(
             system=_load_intake_prompt(),

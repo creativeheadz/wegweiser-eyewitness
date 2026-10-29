@@ -23,7 +23,7 @@
 
   <ol class="ew-items">
   {% for item in row.items %}
-    <li class="ew-item" data-item-id="{{ item.id }}" data-kind="{{ item.kind }}" data-max-seconds="{{ item.max_seconds or '' }}"{% if (item_states or {}).get(item.id) %} data-done="true"{% endif %}>
+    <li class="ew-item" data-item-id="{{ item.id }}" data-kind="{{ item.kind }}" data-max-seconds="{{ item.max_seconds or '' }}"{% if item.raw_audio %} data-raw-audio="true"{% endif %}{% if item.phone_advice and item.phone_advice.too_short %} data-too-short="{{ item.phone_advice.too_short }}"{% endif %}{% if item.phone_advice and item.phone_advice.too_quiet %} data-too-quiet="{{ item.phone_advice.too_quiet }}"{% endif %}{% if (item_states or {}).get(item.id) %} data-done="true"{% endif %}>
       <h2 tabindex="-1">{{ loop.index }}. {{ item.title }}</h2>
       <p>{{ item.instruction }}</p>
       {% if guides.get(item.id) %}
@@ -59,7 +59,7 @@
       <div class="ew-live" data-live>
         <p class="ew-timer" data-timer role="status"></p>
         <p>
-          <button type="button" class="ew-btn" data-record-voice>Record voice note</button>
+          <button type="button" class="ew-btn" data-record-voice>{{ item.record_label or "Record voice note" }}</button>
           <button type="button" class="ew-btn" data-stop-voice hidden>Stop</button>
         </p>
       </div>

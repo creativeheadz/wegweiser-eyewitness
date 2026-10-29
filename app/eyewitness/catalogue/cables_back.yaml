@@ -1,0 +1,7 @@
+id: cables_back
+version: 1
+kind: photo
+title: "Photograph the cables at the back"
+instruction: "Photograph the cables plugged into the back of the device."
+ask_when: "A connection fault where the cables at the back matter, such as no network on one machine, no picture from the computer or a device not detected."
+reader: photo

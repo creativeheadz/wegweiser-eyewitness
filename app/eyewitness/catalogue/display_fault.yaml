@@ -1,0 +1,37 @@
+id: display_fault
+version: 1
+kind: photo
+title: "Photograph the screen showing the problem"
+instruction: "While the problem is showing, photograph the whole screen from about a metre away, including the frame around it."
+ask_when: "The ticket describes a monitor or laptop display fault: no signal, a blank picture while the computer runs, lines, wrong colours, flicker or cracks."
+keywords: [no signal, monitor, flicker, flickering, lines on the screen, lines across the screen, cracked screen]
+reader: vision
+look_for: "A monitor or laptop screen and its frame. Report what the screen shows: a message such as No Signal or Input not supported and the input it names, a black or blank picture, lines across or down the picture, wrong or washed out colours, dark bands that suggest flicker, dead or stuck pixels, cracks or ink-like blotches, or a normal picture. Read the make and model on the frame when they show."
+label: "display"
+fields:
+  - name: symptom
+    type: choice
+    describe: "The main fault you can see."
+    choices: [no_signal_message, black_screen, lines, wrong_colours, flicker_bands, dead_pixels, cracked_or_blotched, distorted_picture, normal_picture, other]
+    in_summary: true
+  - name: on_screen_message
+    type: text
+    describe: "Any message the screen shows, exactly as shown, for example No Signal HDMI 1, or null."
+    in_summary: true
+  - name: input_named
+    type: text
+    describe: "The input the message names, such as HDMI 1 or DisplayPort, or null."
+  - name: line_direction
+    type: choice
+    describe: "Which way any lines run, or none."
+    choices: [vertical, horizontal, both, none]
+  - name: monitor_model
+    type: text
+    describe: "The make and model on the frame, or null."
+    in_summary: true
+retake:
+  not_found: "No screen could be seen in the photo. Point the phone at the screen and photograph all of it."
+  glare: "There is glare on the screen. Tilt the phone slightly and try again."
+  cropped: "Part of the screen is cut off. Step back so the whole screen and its frame fit in the photo."
+  blur: "The photo is out of focus. Hold the phone still and tap the screen to focus."
+  other: "The screen cannot be read. Photograph all of it from about a metre away."

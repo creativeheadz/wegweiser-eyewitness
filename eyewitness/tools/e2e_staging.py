@@ -14,8 +14,9 @@ button path with a next-time item and a follow-up capture), video
 (the Dell blink clip), voice (skip everything, then a voice note),
 injection (the sticky note photo), webhook (a ticket created in
 Zammad arrives by push, with no poll in the scenario), api (the
-Evidence API with a tenant key) and local (Phase 6: the tenant reads
-on its own hardware with Muse Glimmer). Media paths come in as
+Evidence API with a tenant key), local (Phase 6: the tenant reads
+on its own hardware with Muse Glimmer) and catalogue (Phase 7: the
+four catalogue templates end to end). Media paths come in as
 arguments. One PASS or FAIL line prints per step. The script prints
 no secrets and no evidence tokens. Zammad tickets are closed at the
 end; the Wegweiser rows stay as the demo record.
@@ -854,10 +855,91 @@ def scenario_local(stage: Stage) -> None:
             print(f"NOTE tenant restore failed: {str(exc)[:120]}")
 
 
+def scenario_catalogue(stage: Stage) -> None:
+    """The catalogue templates end to end (Phase 7).
+
+    One request through the Evidence API with the four new
+    templates. The items must carry the catalogue titles and
+    instructions exactly. The spoken voice note goes to the beep
+    item first and must come back as the no_beeps retake. Each
+    synthetic file then goes through the customer page routes and
+    its reading is checked. Needs an Evidence API key and the
+    folder from make_catalogue_media.py.
+    """
+    import os
+    args = stage.args
+    folder = args.catalogue_media or ""
+    if not step("catalogue media folder supplied", bool(folder),
+                "" if folder else "pass --catalogue-media"):
+        return
+    api_key = args.api_key or os.environ.get("EYEWITNESS_API_KEY") or ""
+    if not step("api key supplied", bool(api_key),
+                "" if api_key else "pass --api-key or set EYEWITNESS_API_KEY"):
+        return
+    from app.eyewitness import catalogue as _cat
+    headers = {"Authorization": f"Bearer {api_key}",
+               "Content-Type": "application/json"}
+    names = ["printer_test_page", "display_fault", "network_lights",
+             "beep_recording"]
+    made = stage.http.post(
+        f"{stage.base}/api/eyewitness/v1/requests", headers=headers,
+        json={"templates": names, "external_ref": "e2e-catalogue-check"},
+        timeout=30)
+    created = made.json() if made.status_code == 201 else {}
+    if not step("catalogue request created",
+                made.status_code == 201 and bool(created.get("id")),
+                f"http={made.status_code}"):
+        return
+    items = {i.get("template"): i for i in created.get("items") or []}
+    exact = all(items.get(n, {}).get("title") == _cat.get(n)["title"]
+                and items.get(n, {}).get("instruction") == _cat.get(n)["instruction"]
+                for n in names)
+    step("items carry the catalogue wording exactly", exact)
+    link = created.get("link") or ""
+    token = link.rstrip("/").split("/")[-1] if link else ""
+    beep_item = items.get("beep_recording") or {}
+    voice_path = os.path.join(folder, "synthetic-voice-english.wav")
+    if not os.path.exists(voice_path):
+        import glob
+        found = glob.glob(os.path.join(folder, "*voice*english*.wav"))
+        voice_path = found[0] if found else voice_path
+    cap_id, code = stage.upload(token, beep_item.get("id"), voice_path,
+                                "voice.wav", "audio/wav")
+    state = stage.wait_capture(token, cap_id, args.timeout) if cap_id else None
+    step("voice note sent as beeps comes back no_beeps",
+         bool(state and state.get("status") == "retake"
+              and "No beeps could be heard" in str(state.get("advice") or "")),
+         f"status={(state or {}).get('status')} advice={(state or {}).get('advice')}")
+    uploads = [
+        ("printer_test_page", "synthetic-printer-test-page.png", "test-page.png", "image/png",
+         lambda r: "streaks" in ((r.get("fields") or {}).get("defects") or [])),
+        ("display_fault", "synthetic-display-no-signal.png", "display.png", "image/png",
+         lambda r: (r.get("fields") or {}).get("symptom") == "no_signal_message"
+         and "No Signal" in str((r.get("fields") or {}).get("on_screen_message") or "")),
+        ("network_lights", "synthetic-router-lights.png", "router.png", "image/png",
+         lambda r: (r.get("fields") or {}).get("warning_light") is True),
+        ("beep_recording", "synthetic-beeps.wav", "beeps.wav", "audio/wav",
+         lambda r: r.get("pattern") == "long:1 short:2"),
+    ]
+    for template, filename, upload_name, mime, check in uploads:
+        item = items.get(template) or {}
+        cap_id, code = stage.upload(token, item.get("id"),
+                                    os.path.join(folder, filename),
+                                    upload_name, mime)
+        if not step(f"{template} uploaded", cap_id is not None, f"http={code}"):
+            continue
+        state = stage.wait_capture(token, cap_id, args.timeout)
+        row = stage.capture_row(cap_id)
+        reading = (row.reading or {}) if row else {}
+        step(f"{template} reading",
+             bool(state and state.get("status") == "ok") and check(reading),
+             f"status={(state or {}).get('status')} reading={reading}"[:300])
+
+
 SCENARIOS = {"email": scenario_email, "help": scenario_help,
              "video": scenario_video, "voice": scenario_voice,
              "injection": scenario_injection, "webhook": scenario_webhook,
-             "api": scenario_api, "local": scenario_local}
+             "api": scenario_api, "local": scenario_local, "catalogue": scenario_catalogue}
 
 
 def main() -> int:
@@ -881,6 +963,9 @@ def main() -> int:
     parser.add_argument("--api-key", default="",
                         help="Evidence API key for the api scenario. "
                              "Defaults to EYEWITNESS_API_KEY.")
+    parser.add_argument("--catalogue-media", default="",
+                        help="folder from make_catalogue_media.py "
+                             "(catalogue scenario)")
     parser.add_argument("--device", default="RECEPTION-PC",
                         help="the managed device for the help scenario")
     parser.add_argument("--timeout", type=int, default=180)

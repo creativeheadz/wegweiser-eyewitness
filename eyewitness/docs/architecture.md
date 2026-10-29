@@ -55,6 +55,28 @@ or after the request expiry where the close is unknown, and stamps
 `purged_at` on the request and capture rows. The date rule is a
 pure function in `app/eyewitness/retention.py`.
 
+Delivery paths (Phases 5 and 6). A Zammad webhook can hand a new
+ticket over at once, with the poll as the fallback. The Evidence
+API (`docs/api.md`, `docs/openapi.yaml`) lets a desk create and
+read requests with a tenant key, and the MCP server lists the same
+templates by proxy. Signed callbacks report reads, completion and
+expiry. A tenant can read on its own hardware instead: the local
+client carries the same structured read contract, voice notes stay
+untranscribed there, and no local read falls back to the Meta API.
+
+The catalogue (Phase 7). Every evidence template is one YAML file
+in `app/eyewitness/catalogue/`, loaded at import in file name
+order. `requests.TEMPLATES` keeps its old shape for every existing
+consumer, and `tasks.TEMPLATE_READERS` comes from the files, with
+`custom` staying a code path. The generic vision reader
+(`readers/vision.py`, prompt `vision_read_v1.md`) serves any photo
+template from its `look_for` and fields. Code checks the fields,
+builds the summary and picks the fixed retake sentence. Beep
+recordings go to a code-only reader: tonal segments count, speech
+does not, and the pattern table gives the pointer. Operator files
+in `EYEWITNESS_CATALOGUE_DIR` may add vision templates only. See
+`docs/catalogue.md`.
+
 Security (brief 7.8): no free model text to customers; custom items
 and second requests need technician approval; the outgoing filter
 runs even after approval; readings are fenced as untrusted for the

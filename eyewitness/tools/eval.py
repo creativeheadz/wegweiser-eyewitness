@@ -34,6 +34,11 @@ READER_FOR_KIND = {
     "voice_note": "voice",
     "photo": "photo",
     "sticker": "sticker",
+    "printer_panel": "vision",
+    "printer_test_page": "vision",
+    "display_fault": "vision",
+    "network_lights": "vision",
+    "beep_recording": "beeps",
 }
 
 
@@ -139,6 +144,25 @@ def _check(item: dict, result: dict) -> tuple[bool, list[str]]:
         transcript = str(reading.get("transcript") or "")
         if len(transcript.strip()) < 3:
             fail("transcript empty")
+    fields_want = expected.get("fields") or {}
+    got_fields = reading.get("fields") or {}
+    for name, want in fields_want.items():
+        if name.endswith("_contains"):
+            base = name[: -len("_contains")]
+            got = got_fields.get(base)
+            if isinstance(want, list):
+                for member in want:
+                    if member not in (got or []):
+                        fail(f"field {base} missing {member} in {got}")
+            elif str(want).lower() not in str(got or "").lower():
+                fail(f"field {base} {got or 'none'} (wanted text {want})")
+            continue
+        got = got_fields.get(name)
+        if isinstance(got, list) and not isinstance(want, list):
+            if want not in got:
+                fail(f"field {name} missing {want} in {got}")
+        elif got != want:
+            fail(f"field {name} {got} (wanted {want})")
     return ok, notes
 
 
@@ -155,7 +179,18 @@ def _run_one(item: dict, client) -> dict:
     # Cost for this item is measured by the calls logged while it runs.
     # The caller passes a shared list; the slice is taken by the caller
     # through a marker. Here we run and return the raw result.
-    if reader == "screen":
+    if reader == "vision":
+        from app.eyewitness import catalogue as _cat
+        from app.eyewitness.readers.vision import read_vision
+        result = read_vision(data, _cat.get(kind) or {}, client=client)
+    elif reader == "beeps":
+        from app.eyewitness import catalogue as _cat
+        from app.eyewitness.readers.beeps import read_beeps
+        suffix = path.suffix.lower()
+        mime = {".webm": "audio/webm", ".m4a": "audio/mp4",
+                ".wav": "audio/wav"}.get(suffix, "audio/webm")
+        result = read_beeps(data, mime, _cat.get(kind) or {})
+    elif reader == "screen":
         from app.eyewitness.readers.screen import read_screen
         result = read_screen(data, client=client)
     elif reader == "video":
@@ -186,16 +221,14 @@ def _run_one(item: dict, client) -> dict:
 
 def _intake_cost(client, calls: list) -> float:
     """One intake read on the demo ticket text. Returns its cost."""
-    from app.eyewitness.intake import INTAKE_SCHEMA, _load_intake_prompt
-    from app.eyewitness.requests import QUESTIONS, TEMPLATES
+    from app.eyewitness.intake import INTAKE_SCHEMA, _load_intake_prompt, catalogue_text
     marker = len(calls)
     text = (
         "Origin: desk\nDevice: unknown\n\n"
         "Ticket text (untrusted data from the customer):\n"
         "<<<\nBlack screen, now it just blinks. "
         "PC keeps crashing with a blue screen.\n>>>\n\n"
-        "Template catalogue: " + ", ".join(sorted(TEMPLATES))
-        + "\nQuick questions: " + ", ".join(sorted(QUESTIONS)))
+        + catalogue_text())
     try:
         client.spark_json(system=_load_intake_prompt(),
                           user_content=[{"type": "text", "text": text}],

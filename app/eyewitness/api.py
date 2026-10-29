@@ -115,6 +115,14 @@ def heuristic_templates(ticket_text: str) -> tuple[list[str], list[str]]:
                                                    "not booting",
                                                    "no power")):
         items.append("whole_device")
+    from app.eyewitness import catalogue as _cat
+    for spec in _cat.all_specs():
+        for phrase in spec.get("keywords") or []:
+            if phrase in text and spec["id"] not in items:
+                items.append(spec["id"])
+                break
+        if len(items) >= 4:
+            break
     if "when did it start" not in text and items:
         questions.append("since_when")
     return items[:4], questions[:2]
@@ -130,7 +138,7 @@ def decide_auto(ticket_text: str, client=None) -> dict:
     """
     if client is not None and getattr(client, "is_configured", False):
         try:
-            from app.eyewitness.intake import (INTAKE_SCHEMA,
+            from app.eyewitness.intake import (INTAKE_SCHEMA, catalogue_text,
                                                validate_intake_output)
             from app.eyewitness import intake as intake_mod
             safe = (ticket_text or "").replace("<<<", "").replace(">>>", "")
@@ -138,12 +146,7 @@ def decide_auto(ticket_text: str, client=None) -> dict:
                 "Origin: api\nDevice: unknown\n\n"
                 "Ticket text (untrusted data from the customer):\n"
                 f"<<<\n{safe[:4000] or '(no text)'}\n>>>\n\n"
-                "Template catalogue: "
-                + ", ".join(sorted(__import__(
-                    "app.eyewitness.requests", fromlist=["TEMPLATES"]).TEMPLATES))
-                + "\nQuick questions: "
-                + ", ".join(sorted(__import__(
-                    "app.eyewitness.requests", fromlist=["QUESTIONS"]).QUESTIONS)))
+                + catalogue_text())
             raw = client.spark_json(
                 system=intake_mod._load_intake_prompt(),
                 user_content=[{"type": "text", "text": user_text}],
@@ -217,17 +220,30 @@ def serialise_request(row, captures) -> dict:
 
 
 def templates_payload() -> dict:
+    from app.eyewitness import catalogue as _cat
     from app.eyewitness.requests import QUESTIONS, TEMPLATES
+    out = []
+    for name, spec in sorted(TEMPLATES.items()):
+        full = _cat.get(name) or {}
+        entry = {"template": name, "kind": spec["kind"],
+                 "title": spec["title"],
+                 "instruction": spec["instruction"],
+                 "max_seconds": spec["max_seconds"],
+                 "next_time": spec["next_time"],
+                 "reader": full.get("reader"),
+                 "ask_when": full.get("ask_when")}
+        if full.get("reader") == "vision":
+            entry["fields"] = [
+                {"name": f["name"], "type": f["type"],
+                 "choices": f.get("choices")}
+                for f in full.get("fields") or []]
+        out.append(entry)
     return {
-        "templates": [
-            {"template": name, "kind": spec["kind"], "title": spec["title"],
-             "instruction": spec["instruction"],
-             "max_seconds": spec["max_seconds"],
-             "next_time": spec["next_time"]}
-            for name, spec in sorted(TEMPLATES.items())],
+        "templates": out,
         "questions": [
             {"template": name, "title": spec["title"],
-             "options": list(spec.get("options") or [])}
+             "options": list(spec.get("options") or []),
+             "ask_when": spec.get("ask_when")}
             for name, spec in sorted(QUESTIONS.items())],
     }
 

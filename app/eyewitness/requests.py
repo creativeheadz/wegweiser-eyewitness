@@ -12,41 +12,26 @@ import re
 import secrets
 import time
 
-# template -> kind, title, instruction, max_seconds, next-time capable
+from . import catalogue as _catalogue
+
+# Built from the catalogue files, with exactly the shape consumers
+# have always seen. The full spec stays in the catalogue package.
 TEMPLATES: dict[str, dict] = {
-    "screen_photo": {"kind": "photo", "max_seconds": None, "next_time": True,
-                     "title": "Photograph the error on the screen",
-                     "instruction": "Hold the phone about 30 cm from the screen, tap the screen to focus, and take the photo."},
-    "screen_photo_next_time": {"kind": "photo", "max_seconds": None, "next_time": True,
-                               "title": "Photograph the error when it happens again",
-                               "instruction": "When the error appears again, open this link and photograph the screen."},
-    "power_light_video": {"kind": "video", "max_seconds": 15, "next_time": False,
-                          "title": "Film the power light",
-                          "instruction": "Press the power button, then film the light for 10 seconds. Keep the phone still."},
-    "sticker": {"kind": "photo", "max_seconds": None, "next_time": False,
-                "title": "Photograph the sticker",
-                "instruction": "Photograph the label or sticker on the back or underside of the device."},
-    "whole_device": {"kind": "photo", "max_seconds": None, "next_time": False,
-                     "title": "Photograph the whole device",
-                     "instruction": "Take a photo showing the whole device and anything connected to it."},
-    "cables_back": {"kind": "photo", "max_seconds": None, "next_time": False,
-                    "title": "Photograph the cables at the back",
-                    "instruction": "Photograph the cables plugged into the back of the device."},
-    "printer_panel": {"kind": "photo", "max_seconds": None, "next_time": False,
-                      "title": "Photograph the printer panel",
-                      "instruction": "Photograph the printer display so the message can be read."},
-    "voice_note": {"kind": "voice", "max_seconds": 60, "next_time": False,
-                   "title": "Tell us what happened",
-                   "instruction": "Record a short voice note describing what happened, in your own words."},
-}
+    spec["id"]: {"kind": spec["kind"], "max_seconds": spec.get("max_seconds"),
+                 "next_time": bool(spec.get("next_time", False)),
+                 "title": spec["title"], "instruction": spec["instruction"]}
+    for spec in _catalogue.all_specs()}
 
 QUESTIONS: dict[str, dict] = {
     "since_when": {"title": "When did it start?",
-                   "options": ["today", "this week", "longer", "can't say"]},
+                   "options": ["today", "this week", "longer", "can't say"],
+                   "ask_when": "The ticket does not say when the problem started."},
     "how_often": {"title": "How often does it happen?",
-                  "options": ["once", "several times", "constantly"]},
+                  "options": ["once", "several times", "constantly"],
+                  "ask_when": "The ticket does not say whether the problem happened once or keeps happening."},
     "what_changed": {"title": "Did anything change just before it started?",
-                     "options": [], "free_text_max": 200},
+                     "options": [], "free_text_max": 200,
+                     "ask_when": "The ticket does not say whether anything changed just before the problem started, such as an update, a move or new hardware."},
 }
 
 LETTERS = "ABCDEFGH"
@@ -60,14 +45,30 @@ def make_item(template: str, *, custom_text: str | None = None,
                 "title": "One more thing", "instruction": (custom_text or "")[:500],
                 "max_seconds": None, "custom": True, "open_until": None}
     spec = TEMPLATES[template]
+    full = _catalogue.get(template)
     days = open_days
     if days is None and template == "screen_photo_next_time":
         days = int(os.environ.get("EYEWITNESS_NEXT_TIME_DAYS", "7"))
     open_until = int(time.time()) + days * 86400 if days else None
-    return {"id": template, "template": template, "kind": spec["kind"],
+    item = {"id": template, "template": template, "kind": spec["kind"],
             "title": spec["title"], "instruction": spec["instruction"],
             "max_seconds": spec["max_seconds"], "custom": False,
             "open_until": open_until}
+    if full is not None:
+        if full.get("record_label"):
+            item["record_label"] = full["record_label"]
+        retake = full.get("retake") or {}
+        advice = {k: retake[k] for k in ("too_short", "too_quiet")
+                  if k in retake}
+        if advice:
+            item["phone_advice"] = advice
+        if full.get("reader") == "beeps":
+            item["phone_advice"] = item.get("phone_advice") or {
+                "too_short": (retake.get("too_short") or ""),
+                "too_quiet": (retake.get("too_quiet") or "")}
+            item["phone_advice"] = {k: v for k, v in item["phone_advice"].items() if v}
+            item["raw_audio"] = True
+    return item
 
 
 def make_question_item(template: str) -> dict:

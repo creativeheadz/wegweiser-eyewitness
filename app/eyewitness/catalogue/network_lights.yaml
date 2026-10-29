@@ -1,0 +1,33 @@
+id: network_lights
+version: 1
+kind: photo
+title: "Photograph the lights on your router"
+instruction: "Photograph the front of your router or internet box so every light and its label can be seen."
+ask_when: "The internet or network at the customer's site is down, slow or dropping, and the router's lights would show the fault."
+keywords: [router, internet is down, no internet, wifi is down, broadband, internet box]
+reader: vision
+look_for: "The front of a router, internet box, modem or network switch with its status lights. For every light you can see, give its label or symbol and its colour, or say it is off. Note any light that is red or orange. Read the make and model when they show."
+label: "router lights"
+fields:
+  - name: lights
+    type: list
+    describe: "One entry per light: its label or symbol, then its colour or off, for example Internet: red."
+    in_summary: true
+  - name: warning_light
+    type: yes_no
+    describe: "True when any light is red or orange."
+    in_summary: true
+  - name: all_lights_off
+    type: yes_no
+    describe: "True when no light is lit at all."
+    in_summary: true
+  - name: device_model
+    type: text
+    describe: "The make and model shown on the device, or null."
+    in_summary: true
+retake:
+  not_found: "No router lights could be seen in the photo. Photograph the front of the box where the lights are."
+  glare: "Reflections are hiding the lights. Turn off the flash and try again."
+  cropped: "Some of the lights are cut off. Step back so every light fits in the photo."
+  blur: "The photo is out of focus. Hold the phone still and tap the screen to focus."
+  other: "The lights cannot be read. Photograph the front of the box in good light."

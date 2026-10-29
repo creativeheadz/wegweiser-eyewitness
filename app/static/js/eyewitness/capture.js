@@ -176,7 +176,11 @@
         status.textContent = "No camera here. Use the file button below.";
         return Promise.reject(new Error("no camera"));
       }
-      var want = kind === "voice" ? { audio: true }
+      // A beep recording needs the raw tone. Browser noise handling
+      // treats a steady tone as noise, so it stays off for raw items.
+      var rawAudio = li.getAttribute("data-raw-audio") === "true";
+      var audioWant = rawAudio ? { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } } : { audio: true };
+      var want = kind === "voice" ? audioWant
         : { video: { facingMode: "environment" }, audio: !!wantAudio };
       return navigator.mediaDevices.getUserMedia(want).then(function (s) {
         stream = s;
@@ -307,8 +311,10 @@
           var seconds = (Date.now() - started) / 1000;
           var blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
           stopStream();
-          if (seconds < VOICE_MIN_SECONDS) { status.textContent = TOO_SHORT_VOICE; return; }
-          if (peakCount && (peakSum / peakCount) < VOICE_MIN_RMS) { status.textContent = TOO_QUIET_VOICE; return; }
+          var tooShort = li.getAttribute("data-too-short") || TOO_SHORT_VOICE;
+          var tooQuiet = li.getAttribute("data-too-quiet") || TOO_QUIET_VOICE;
+          if (seconds < VOICE_MIN_SECONDS) { status.textContent = tooShort; return; }
+          if (peakCount && (peakSum / peakCount) < VOICE_MIN_RMS) { status.textContent = tooQuiet; return; }
           var type = rec.mimeType || "";
           uploadAndPoll(itemId, blob, type.indexOf("mp4") >= 0 || type.indexOf("m4a") >= 0 ? "voice.m4a" : "voice.webm", status, li);
         };

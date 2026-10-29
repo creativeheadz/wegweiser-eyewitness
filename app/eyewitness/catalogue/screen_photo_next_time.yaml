@@ -1,0 +1,8 @@
+id: screen_photo_next_time
+version: 1
+kind: photo
+title: "Photograph the error when it happens again"
+instruction: "When the error appears again, open this link and photograph the screen."
+next_time: true
+ask_when: "An error or crash screen appeared earlier and is not showing now, so the customer photographs it when it comes back."
+reader: screen

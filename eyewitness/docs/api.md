@@ -20,6 +20,14 @@ Send the key as a bearer token on every call. Keys carry scopes.
 
 ## List templates
 
+Each template entry holds `template`, `kind`, `title`,
+`instruction`, `max_seconds`, `next_time`, `reader` and
+`ask_when`. A vision template also holds `fields`, one entry per
+field with its `name`, `type` and `choices`. Each quick question
+holds its `ask_when` line as well. The four catalogue templates
+(`printer_test_page`, `display_fault`, `network_lights`,
+`beep_recording`) list here with the rest.
+
 ```bash
 curl -s https://app.wegweiser.tech/api/eyewitness/v1/templates \
   -H "Authorization: Bearer $EYEWITNESS_API_KEY"
